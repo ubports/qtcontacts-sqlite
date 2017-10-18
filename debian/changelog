@@ -1,0 +1,5 @@
+qtcontacts-sqlite (0.2.27+ubports) vivid; urgency=medium
+
+  * Initial release.
+
+ -- Alberto Mardegan <mardy@users.sourceforge.net>  Tue, 17 Oct 2017 22:45:55 +0300

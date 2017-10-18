@@ -1,0 +1,34 @@
+Source: qtcontacts-sqlite
+Section: libs
+Priority: optional
+Maintainer: Alberto Mardegan <mardy@users.sourceforge.net>
+Build-Depends: debhelper (>= 9),
+               pkg-config,
+               libqt5sql5-sqlite,
+               qt5-default,
+               qtbase5-dev,
+               qtpim5-dev,
+Standards-Version: 3.9.5
+Homepage: https://github.com/ubports/qtcontacts-sqlite
+
+Package: qtcontacts-sqlite-qt5-extension
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: libqt5sql5-sqlite,
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: SQLite-based plugin for QtPIM Contacts
+ Backend for the QtContacts API which stores contact information to a local
+ SQLite database.
+
+Package: qtcontacts-sqlite-qt5-extension-dev
+Section: libdevel
+Architecture: any
+Depends: qtcontacts-sqlite-qt5-extension (= ${binary:Version}),
+         ${shlibs:Depends},
+         ${misc:Depends}
+Description: SQLite-based plugin for QtPIM Contacts - development files
+ This package contains extension headers for the qtcontacts-sqlite-qt5
+ library.
+
