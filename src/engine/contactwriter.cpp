@@ -407,8 +407,13 @@ QContactManager::Error ContactWriter::saveRelationships(
     for (int i = 0; i < relationships.size(); ++i) {
         const QContactRelationship &relationship = relationships.at(i);
 
+#ifdef NEW_QTPIM
+        QContactId first(relationship.first());
+        QContactId second(relationship.second());
+#else
         QContactId first(relationship.first().id());
         QContactId second(relationship.second().id());
+#endif
 
         const quint32 firstId = ContactId::databaseId(first);
         const quint32 secondId = ContactId::databaseId(second);
@@ -2687,7 +2692,11 @@ static void promoteDetailsToLocal(const QList<QContactDetail> addDelta, const QL
                 localContact->saveDetail(&lts);
             } else if (type == detailType<QContactGender>()) {
                 QContactGender lg = localContact->detail<QContactGender>();
+#ifdef NEW_QTPIM
+                lg.setGender(static_cast<QContactGender::GenderType>(original.value<int>(QContactGender::FieldGender)));
+#else
                 lg.setGender(static_cast<QContactGender::GenderField>(original.value<int>(QContactGender::FieldGender)));
+#endif
                 localContact->saveDetail(&lg);
             } else if (type == detailType<QContactFavorite>()) {
                 QContactFavorite lf = localContact->detail<QContactFavorite>();
@@ -2729,11 +2738,16 @@ static QContactRelationship makeRelationship(const QString &type, const QContact
     QContactRelationship relationship;
     relationship.setRelationshipType(type);
 
+#ifdef NEW_QTPIM
+    relationship.setFirst(firstId);
+    relationship.setSecond(secondId);
+#else
     QContact first, second;
     first.setId(firstId);
     second.setId(secondId);
     relationship.setFirst(first);
     relationship.setSecond(second);
+#endif
 
     return relationship;
 }

@@ -79,8 +79,6 @@ do {                                                                      \
 Q_DECLARE_METATYPE(QVariant)
 Q_DECLARE_METATYPE(QContactManager*)
 
-Q_DECLARE_METATYPE(QContactDetail::DetailType)
-
 static int detailField(int field) { return field; }
 
 static bool validDetailField(int field) { return (field != -1); }
@@ -1820,7 +1818,7 @@ void tst_QContactManagerFiltering::relationshipFiltering()
     crf.setRelationshipType(relationshipType);
     QContact rc;
     rc.setId(relatedContactId);
-    crf.setRelatedContact(rc);
+    setFilterContact(crf, rc);
 
     // 4. Grab the filtering results
     QList<QContactId> contacts;

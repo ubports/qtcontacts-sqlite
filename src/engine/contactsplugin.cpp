@@ -48,8 +48,10 @@ public:
     QContactManagerEngine *engine(
             const QMap<QString, QString> &parameters, QContactManager::Error* error);
     QString managerName() const;
+#ifndef NEW_QTPIM
     QContactEngineId *createContactEngineId(
             const QMap<QString, QString> &parameters, const QString &engineIdString) const;
+#endif
 };
 
 
@@ -77,11 +79,13 @@ QString ContactsFactory::managerName() const
     return QString::fromLatin1("org.nemomobile.contacts.sqlite");
 }
 
+#ifndef NEW_QTPIM
 QContactEngineId *ContactsFactory::createContactEngineId(
         const QMap<QString, QString> &parameters, const QString &engineIdString) const
 {
     Q_UNUSED(parameters)
     return new ContactId(engineIdString);
 }
+#endif
 
 #include "contactsplugin.moc"

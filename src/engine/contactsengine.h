@@ -58,6 +58,12 @@ inline void operator==(const QContactDetail &, const QContactDetail &) {}
 
 class JobThread;
 
+#ifdef NEW_QTPIM
+#define NEW_OVERRIDE    override
+#else
+#define NEW_OVERRIDE
+#endif
+
 class ContactsEngine : public QtContactsSqliteExtensions::ContactManagerEngine
 {
     Q_OBJECT
@@ -116,9 +122,16 @@ public:
 
     QList<QContactRelationship> relationships(
             const QString &relationshipType,
+            const QContactId &participant,
+            QContactRelationship::Role role,
+            QContactManager::Error *error) const NEW_OVERRIDE;
+#ifndef NEW_QTPIM
+    QList<QContactRelationship> relationships(
+            const QString &relationshipType,
             const QContact &participant,
             QContactRelationship::Role role,
             QContactManager::Error *error) const override;
+#endif
     bool saveRelationships(
             QList<QContactRelationship> *relationships,
             QMap<int, QContactManager::Error> *errorMap,

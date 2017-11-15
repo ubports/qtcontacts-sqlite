@@ -466,8 +466,13 @@ public:
     RelationshipFetchJob(QContactRelationshipFetchRequest *request)
         : TemplateJob(request)
         , m_type(request->relationshipType())
+#ifdef NEW_QTPIM
+        , m_first(request->first())
+        , m_second(request->second())
+#else
         , m_first(request->first().id())
         , m_second(request->second().id())
+#endif
     {
     }
 
@@ -1058,11 +1063,11 @@ bool ContactsEngine::setSelfContactId(
 
 QList<QContactRelationship> ContactsEngine::relationships(
         const QString &relationshipType,
-        const QContact &participant,
+        const QContactId &participant,
         QContactRelationship::Role role,
         QContactManager::Error *error) const
 {
-    QContactId first = ContactId::apiId(participant);
+    QContactId first = participant;
     QContactId second;
 
     if (role == QContactRelationship::Second)
@@ -1075,6 +1080,20 @@ QList<QContactRelationship> ContactsEngine::relationships(
         *error = err;
     return relationships;
 }
+
+#ifndef NEW_QTPIM
+QList<QContactRelationship> ContactsEngine::relationships(
+        const QString &relationshipType,
+        const QContact &participant,
+        QContactRelationship::Role role,
+        QContactManager::Error *error) const
+{
+    return relationships(relationshipType,
+                         ContactId::apiId(participant),
+                         role,
+                         error);
+}
+#endif
 
 bool ContactsEngine::saveRelationships(
         QList<QContactRelationship> *relationships,
@@ -1396,13 +1415,21 @@ void ContactsEngine::_q_contactsAdded(const QVector<quint32> &contactIds)
 
 void ContactsEngine::_q_contactsChanged(const QVector<quint32> &contactIds)
 {
-    emit contactsChanged(idList(contactIds));
+    emit contactsChanged(idList(contactIds)
+#ifdef NEW_QTPIM
+                         , QList<QtContacts::QContactDetail::DetailType>()
+#endif
+                         );
 }
 
 void ContactsEngine::_q_contactsPresenceChanged(const QVector<quint32> &contactIds)
 {
     if (m_mergePresenceChanges) {
-        emit contactsChanged(idList(contactIds));
+        emit contactsChanged(idList(contactIds)
+#ifdef NEW_QTPIM
+                             , QList<QtContacts::QContactDetail::DetailType>()
+#endif
+                             );
     } else {
         emit contactsPresenceChanged(idList(contactIds));
     }

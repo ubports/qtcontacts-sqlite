@@ -11,7 +11,11 @@ HEADERS += \
     testsyncadapter.h
 
 SOURCES += \
-    ../../../src/engine/contactid.cpp \
     testsyncadapter.cpp \
     tst_aggregation.cpp
 
+CONFIG(new_qtpim) {
+    SOURCES += ../../../src/engine/contactid.cpp
+} else {
+    SOURCES += ../../../src/engine/contactengineid.cpp
+}

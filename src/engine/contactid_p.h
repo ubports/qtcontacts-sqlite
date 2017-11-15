@@ -36,11 +36,18 @@
 #include <QContactId>
 #include <QContact>
 
+#ifndef NEW_QTPIM
 #include <QContactEngineId>
+#endif
 
 QTCONTACTS_USE_NAMESPACE
 
-class ContactId : public QContactEngineId
+class ContactId:
+#ifdef NEW_QTPIM
+    public QContactId
+#else
+    public QContactEngineId
+#endif
 {
 public:
     static QContactId apiId(const QContact &contact);
@@ -60,6 +67,7 @@ public:
 
     static QContactId fromString(const QString &id);
 
+#ifndef NEW_QTPIM
     ContactId(quint32 databaseId);
     ContactId(const QString &s);
 
@@ -78,6 +86,7 @@ public:
 
 private:
     quint32 m_databaseId;
+#endif
 };
 
 #endif // QTCONTACTSSQLITE_CONTACTIDIMPL
