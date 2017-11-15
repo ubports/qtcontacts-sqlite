@@ -146,15 +146,21 @@
 QTCONTACTS_USE_NAMESPACE
 
 Q_DECLARE_METATYPE(QList<QContactId>)
+Q_DECLARE_METATYPE(QContactDetail::DetailType)
 
 void registerIdType()
 {
     qRegisterMetaType<QContactId>("QContactId");
     qRegisterMetaType<QList<QContactId> >("QList<QContactId>");
+    qRegisterMetaType<QList<QContactDetail::DetailType> >("QList<QContactDetail::DetailType>");
 }
 
 const char *contactsAddedSignal = SIGNAL(contactsAdded(QList<QContactId>));
+#ifdef NEW_QTPIM
+const char *contactsChangedSignal = SIGNAL(contactsChanged(QList<QContactId>, QList<QContactDetail::DetailType>));
+#else
 const char *contactsChangedSignal = SIGNAL(contactsChanged(QList<QContactId>));
+#endif
 const char *contactsPresenceChangedSignal = SIGNAL(contactsPresenceChanged(QList<QContactId>));
 const char *contactsRemovedSignal = SIGNAL(contactsRemoved(QList<QContactId>));
 const char *relationshipsAddedSignal = SIGNAL(relationshipsAdded(QList<QContactId>));
@@ -351,18 +357,27 @@ void setFilterType(QContactRelationshipFilter &filter, T type)
 
 void setFilterContact(QContactRelationshipFilter &filter, const QContact &contact)
 {
+#ifdef NEW_QTPIM
+    filter.setRelatedContactId(contact.id());
+#else
     filter.setRelatedContact(contact);
+#endif
 }
 
 QContactRelationship makeRelationship(const QContactId &firstId, const QContactId &secondId)
 {
     QContactRelationship relationship;
 
+#ifdef NEW_QTPIM
+    relationship.setFirst(firstId);
+    relationship.setSecond(secondId);
+#else
     QContact first, second;
     first.setId(firstId);
     second.setId(secondId);
     relationship.setFirst(first);
     relationship.setSecond(second);
+#endif
 
     return relationship;
 }
@@ -382,9 +397,20 @@ QContactRelationship makeRelationship(const QString &type, const QContactId &fir
     return relationship;
 }
 
+#ifdef NEW_QTPIM
+QContactId relatedContact(const QContact &contact) { return contact.id(); }
+#else
 const QContact &relatedContact(const QContact &contact) { return contact; }
+#endif
+
+QContactId relatedContactId(const QContactId &contact) { return contact; }
 
 QContactId relatedContactId(const QContact &contact) { return contact.id(); }
+
+QList<QContactId> relatedContactIds(const QList<QContactId> &contacts)
+{
+    return contacts;
+}
 
 QList<QContactId> relatedContactIds(const QList<QContact> &contacts)
 {

@@ -584,6 +584,9 @@ void tst_QContactManager::saveContactName(QContact *contact, QContactDetailDefin
 
 void tst_QContactManager::metadata()
 {
+#ifdef NEW_QTPIM
+    QSKIP("Non relevant with newer QtPim");
+#endif
     // ensure that the backend is publishing its metadata (name / parameters / uri) correctly
     QFETCH(QString, uri);
     QScopedPointer<QContactManager> cm(newContactManager());
@@ -1840,7 +1843,13 @@ void tst_QContactManager::nonprivileged()
     QScopedPointer<QContactManager> nonprivilegedCm(QContactManager::fromUri(QContactManager::buildUri(managerName, params)));
     QVERIFY(nonprivilegedCm);
     QVERIFY(!nonprivilegedCm->managerUri().isEmpty());
+
+    /* With newer QtPim, the same managerUri() is returned unless the
+     * parameters affect the validity of contact IDs. therefore, the
+     * next check is only valid for older QtPim versions */
+#ifndef NEW_QTPIM
     QVERIFY(nonprivilegedCm->managerUri() != privilegedCm->managerUri());
+#endif
 
     QSignalSpy privilegedAddedSpy(privilegedCm.data(), contactsAddedSignal);
     QSignalSpy nonprivilegedAddedSpy(nonprivilegedCm.data(), contactsAddedSignal);
@@ -2380,8 +2389,13 @@ void tst_QContactManager::signalEmission()
     QTRY_VERIFY(spyCA.count() >= addSigCount);
     addSigCount = spyCA.count();
 
+#ifdef NEW_QTPIM
+    const char *observerContactChangedSignal = SIGNAL(contactChanged(QList<QContactDetail::DetailType>));
+#else
+    const char *observerContactChangedSignal = SIGNAL(contactChanged());
+#endif
     QScopedPointer<QContactObserver> c1Observer(new QContactObserver(m1.data(), cid));
-    QScopedPointer<QSignalSpy> spyCOM1(new QSignalSpy(c1Observer.data(), SIGNAL(contactChanged())));
+    QScopedPointer<QSignalSpy> spyCOM1(new QSignalSpy(c1Observer.data(), observerContactChangedSignal));
     QScopedPointer<QSignalSpy> spyCOR1(new QSignalSpy(c1Observer.data(), SIGNAL(contactRemoved())));
 
     // verify save modified emits signal changed
@@ -2443,8 +2457,8 @@ void tst_QContactManager::signalEmission()
     spyCOR1->clear();
     QScopedPointer<QContactObserver> c2Observer(new QContactObserver(m1.data(), ContactId::apiId(c2)));
     QScopedPointer<QContactObserver> c3Observer(new QContactObserver(m1.data(), ContactId::apiId(c3)));
-    QScopedPointer<QSignalSpy> spyCOM2(new QSignalSpy(c2Observer.data(), SIGNAL(contactChanged())));
-    QScopedPointer<QSignalSpy> spyCOM3(new QSignalSpy(c3Observer.data(), SIGNAL(contactChanged())));
+    QScopedPointer<QSignalSpy> spyCOM2(new QSignalSpy(c2Observer.data(), observerContactChangedSignal));
+    QScopedPointer<QSignalSpy> spyCOM3(new QSignalSpy(c3Observer.data(), observerContactChangedSignal));
     QScopedPointer<QSignalSpy> spyCOR2(new QSignalSpy(c2Observer.data(), SIGNAL(contactRemoved())));
     QScopedPointer<QSignalSpy> spyCOR3(new QSignalSpy(c3Observer.data(), SIGNAL(contactRemoved())));
 
@@ -2522,9 +2536,9 @@ void tst_QContactManager::signalEmission()
     c1Observer.reset(new QContactObserver(m1.data(), ContactId::apiId(c)));
     c2Observer.reset(new QContactObserver(m1.data(), ContactId::apiId(c2)));
     c3Observer.reset(new QContactObserver(m1.data(), ContactId::apiId(c3)));
-    spyCOM1.reset(new QSignalSpy(c1Observer.data(), SIGNAL(contactChanged())));
-    spyCOM2.reset(new QSignalSpy(c2Observer.data(), SIGNAL(contactChanged())));
-    spyCOM3.reset(new QSignalSpy(c3Observer.data(), SIGNAL(contactChanged())));
+    spyCOM1.reset(new QSignalSpy(c1Observer.data(), observerContactChangedSignal));
+    spyCOM2.reset(new QSignalSpy(c2Observer.data(), observerContactChangedSignal));
+    spyCOM3.reset(new QSignalSpy(c3Observer.data(), observerContactChangedSignal));
     spyCOR1.reset(new QSignalSpy(c1Observer.data(), SIGNAL(contactRemoved())));
     spyCOR2.reset(new QSignalSpy(c2Observer.data(), SIGNAL(contactRemoved())));
     spyCOR3.reset(new QSignalSpy(c3Observer.data(), SIGNAL(contactRemoved())));
@@ -3026,13 +3040,28 @@ void tst_QContactManager::changeSet()
     QVERIFY(changeSet.removedContacts().isEmpty());
     QVERIFY(changeSet.addedContacts().contains(id));
 
+#ifdef NEW_QTPIM
+    changeSet.insertChangedContact(id,
+                                   QList<QtContacts::QContactDetail::DetailType>());
+    changeSet.insertChangedContacts(QList<QContactId>() << id,
+                                    QList<QtContacts::QContactDetail::DetailType>());
+#else
     changeSet.insertChangedContact(id);
     changeSet.insertChangedContacts(QList<QContactId>() << id);
+#endif
     QVERIFY(changeSet.changedContacts().size() == 1); // set, should only be added once.
     QVERIFY(!changeSet.addedContacts().isEmpty());
     QVERIFY(!changeSet.changedContacts().isEmpty());
     QVERIFY(changeSet.removedContacts().isEmpty());
+#ifdef NEW_QTPIM
+    QList<QContactId> changedIds;
+    Q_FOREACH(const auto &pair, changeSet.changedContacts()) {
+        changedIds.append(pair.second);
+    }
+    QVERIFY(changedIds.contains(id));
+#else
     QVERIFY(changeSet.changedContacts().contains(id));
+#endif
     changeSet.clearChangedContacts();
     QVERIFY(changeSet.changedContacts().isEmpty());
 
@@ -3078,13 +3107,18 @@ void tst_QContactManager::changeSet()
     changeSet.removedRelationshipsContacts().insert(id);
     changeSet.emitSignals(0);
 
-    changeSet.setOldAndNewSelfContactId(QPair<QContactId, QContactId>(QContactId(0), id));
+#ifdef NEW_QTPIM
+    QContactId nullId;
+#else
+    QContactId nullId(0);
+#endif
+    changeSet.setOldAndNewSelfContactId(QPair<QContactId, QContactId>(nullId, id));
     changeSet2 = changeSet;
     QVERIFY(changeSet2.addedRelationshipsContacts() == changeSet.addedRelationshipsContacts());
     QVERIFY(changeSet2.removedRelationshipsContacts() == changeSet.removedRelationshipsContacts());
     QVERIFY(changeSet2.oldAndNewSelfContactId() == changeSet.oldAndNewSelfContactId());
     changeSet.emitSignals(0);
-    changeSet.setOldAndNewSelfContactId(QPair<QContactId, QContactId>(id, QContactId(0)));
+    changeSet.setOldAndNewSelfContactId(QPair<QContactId, QContactId>(id, nullId));
     QVERIFY(changeSet2.oldAndNewSelfContactId() != changeSet.oldAndNewSelfContactId());
     changeSet.setDataChanged(true);
     changeSet.emitSignals(0);
@@ -3807,7 +3841,7 @@ void tst_QContactManager::familyDetail()
 
     QCOMPARE(a.relatedContacts(QContactRelationship::Aggregates(), QContactRelationship::First).count(), 1);
 
-    QContactId aa(a.relatedContacts(QContactRelationship::Aggregates(), QContactRelationship::First).first().id());
+    QContactId aa(relatedContactId(a.relatedContacts(QContactRelationship::Aggregates(), QContactRelationship::First).first()));
     QVERIFY(!aa.isNull());
 
     QContactDetailFilter familyFilter;
@@ -3867,7 +3901,7 @@ void tst_QContactManager::geoLocationDetail()
 
     QCOMPARE(a.relatedContacts(QContactRelationship::Aggregates(), QContactRelationship::First).count(), 1);
 
-    QContactId aa(a.relatedContacts(QContactRelationship::Aggregates(), QContactRelationship::First).first().id());
+    QContactId aa(relatedContactId(a.relatedContacts(QContactRelationship::Aggregates(), QContactRelationship::First).first()));
     QVERIFY(!aa.isNull());
 
     QContactDetailFilter geoLocationFilter;

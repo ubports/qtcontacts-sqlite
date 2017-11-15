@@ -39,7 +39,6 @@ SOURCES += \
         memorytable.cpp \
         semaphore_p.cpp \
         conversion.cpp \
-        contactid.cpp \
         contactsdatabase.cpp \
         contactsengine.cpp \
         contactstransientstore.cpp \
@@ -47,6 +46,12 @@ SOURCES += \
         contactnotifier.cpp \
         contactreader.cpp \
         contactwriter.cpp
+
+CONFIG(new_qtpim) {
+    SOURCES += contactid.cpp
+} else {
+    SOURCES += contactengineid.cpp
+}
 
 target.path = $$[QT_INSTALL_PLUGINS]/contacts
 INSTALLS += target
