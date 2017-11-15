@@ -11,5 +11,10 @@ HEADERS += \
     ../../util.h \
     ../../qcontactmanagerdataholder.h
 SOURCES += \
-    ../../../src/engine/contactid.cpp \
     tst_qcontactmanager.cpp
+
+CONFIG(new_qtpim) {
+    SOURCES += ../../../src/engine/contactid.cpp
+} else {
+    SOURCES += ../../../src/engine/contactengineid.cpp
+}

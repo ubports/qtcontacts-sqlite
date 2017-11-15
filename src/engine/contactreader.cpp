@@ -659,11 +659,16 @@ static QContactRelationship makeRelationship(const QString &type, quint32 firstI
     QContactRelationship relationship;
     relationship.setRelationshipType(type);
 
+#ifdef NEW_QTPIM
+    relationship.setFirst(ContactId::apiId(firstId));
+    relationship.setSecond(ContactId::apiId(secondId));
+#else
     QContact first, second;
     first.setId(ContactId::apiId(firstId));
     second.setId(ContactId::apiId(secondId));
     relationship.setFirst(first);
     relationship.setSecond(second);
+#endif
 
     return relationship;
 }
@@ -1227,7 +1232,11 @@ static QString buildWhere(const QContactIdFilter &filter, ContactsDatabase &db, 
 
 static QString buildWhere(const QContactRelationshipFilter &filter, QVariantList *bindings, bool *failed)
 {
+#ifdef NEW_QTPIM
+    QContactId rci = filter.relatedContactId();
+#else
     QContactId rci = filter.relatedContact().id();
+#endif
 
     QContactRelationship::Role rcr = filter.relatedContactRole();
     QString rt = filter.relationshipType();
@@ -2175,7 +2184,11 @@ QContactManager::Error ContactReader::queryContacts(
         QContactGender gender;
         // Gender is an enum in qtpim
         QString genderText = contactQuery.value(col++).toString();
+#ifdef NEW_QTPIM
+        gender.setGender(static_cast<QContactGender::GenderType>(genderText.toInt()));
+#else
         gender.setGender(static_cast<QContactGender::GenderField>(genderText.toInt()));
+#endif
         contact.saveDetail(&gender);
 
         QContactFavorite favorite;
