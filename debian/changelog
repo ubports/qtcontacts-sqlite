@@ -1,3 +1,9 @@
+qtcontacts-sqlite (0.2.27+ubports1) xenial; urgency=medium
+
+  * First xenial release, add Jenkinsfile.
+
+ -- Alberto Mardegan <mardy@users.sourceforge.net>  Thu, 15 Mar 2018 18:23:32 +0300
+
 qtcontacts-sqlite (0.2.27+ubports) vivid; urgency=medium
 
   * Initial release.
