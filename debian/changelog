@@ -1,3 +1,9 @@
+qtcontacts-sqlite (0.2.28~0ubports1) xenial; urgency=medium
+
+  * Update to latest QtPim
+
+ -- Alberto Mardegan <mardy@users.sourceforge.net>  Mon, 10 Sep 2018 20:37:26 +0300
+
 qtcontacts-sqlite (0.2.27+ubports1) xenial; urgency=medium
 
   * First xenial release, add Jenkinsfile.
