@@ -36,6 +36,7 @@
 #include "contactsdatabase.h"
 
 #include <QContact>
+#include <QContactCollection>
 #include <QContactManager>
 
 #include <QSqlDatabase>
@@ -48,6 +49,8 @@ class ContactReader
 public:
     ContactReader(ContactsDatabase &database);
     virtual ~ContactReader();
+
+    QContactManager::Error readCollections();
 
     QContactManager::Error readContacts(
             const QString &table,
@@ -97,6 +100,7 @@ protected:
     QContactManager::Error queryContacts(
             const QString &table, QList<QContact> *contacts, const QContactFetchHint &fetchHint, bool relaxConstraints, QSqlQuery &query, QSqlQuery &relationshipQuery);
 
+    virtual void collectionsAvailable(const QList<QContactCollection> &collections);
     virtual void contactsAvailable(const QList<QContact> &contacts);
     virtual void contactIdsAvailable(const QList<QContactId> &contactIds);
 

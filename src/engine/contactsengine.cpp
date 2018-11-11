@@ -104,6 +104,7 @@ public:
     virtual void updateState(QContactAbstractRequest::State state) = 0;
     virtual void setError(QContactManager::Error) {}
 
+    virtual void collectionsAvailable(const QList<QContactCollection> &) {}
     virtual void contactsAvailable(const QList<QContact> &) {}
     virtual void contactIdsAvailable(const QList<QContactId> &) {}
 
@@ -218,6 +219,53 @@ public:
 private:
     QList<QContactId> m_contactIds;
     QMap<int, QContactManager::Error> m_errorMap;
+};
+
+class ContactCollectionFetchJob : public TemplateJob<QContactCollectionFetchRequest>
+{
+public:
+    ContactCollectionFetchJob(QContactCollectionFetchRequest *request)
+        : TemplateJob(request)
+    {
+    }
+
+    void execute(ContactReader *reader, WriterProxy &)
+    {
+        m_error = reader->readCollections();
+    }
+
+    void update(QMutex *mutex)
+    {
+        QList<QContactCollection> collections;
+        {
+            QMutexLocker locker(mutex);
+            collections = m_collections;
+        }
+        QContactManagerEngine::updateCollectionFetchRequest(
+                m_request,
+                collections,
+                QContactManager::NoError,
+                QContactAbstractRequest::ActiveState);
+    }
+
+    void updateState(QContactAbstractRequest::State state)
+    {
+        QContactManagerEngine::updateCollectionFetchRequest(m_request, m_collections, m_error, state);
+    }
+
+    void collectionsAvailable(const QList<QContactCollection> &collections) override
+    {
+        m_collections = collections;
+    }
+
+    QString description() const
+    {
+        QString s(QLatin1String("Fetch collections"));
+        return s;
+    }
+
+private:
+    QList<QContactCollection> m_collections;
 };
 
 class ContactFetchJob : public TemplateJob<QContactFetchRequest>
@@ -683,6 +731,13 @@ public:
         }
     }
 
+    void collectionsAvailable(const QList<QContactCollection> &collections)
+    {
+        QMutexLocker locker(&m_mutex);
+        m_currentJob->collectionsAvailable(collections);
+        postUpdate();
+    }
+
     void contactsAvailable(const QList<QContact> &contacts)
     {
         QMutexLocker locker(&m_mutex);
@@ -758,6 +813,11 @@ public:
         : ContactReader(database)
         , m_thread(thread)
     {
+    }
+
+    void collectionsAvailable(const QList<QContactCollection> &collections) override
+    {
+        m_thread->collectionsAvailable(collections);
     }
 
     void contactsAvailable(const QList<QContact> &contacts) override
@@ -1137,6 +1197,11 @@ bool ContactsEngine::startRequest(QContactAbstractRequest* request)
     case QContactAbstractRequest::ContactRemoveRequest:
         job = new ContactRemoveJob(qobject_cast<QContactRemoveRequest *>(request));
         break;
+#ifdef NEW_QTPIM
+    case QContactAbstractRequest::CollectionFetchRequest:
+        job = new ContactCollectionFetchJob(qobject_cast<QContactCollectionFetchRequest *>(request));
+        break;
+#endif
     case QContactAbstractRequest::ContactFetchRequest:
         job = new ContactFetchJob(qobject_cast<QContactFetchRequest *>(request));
         break;

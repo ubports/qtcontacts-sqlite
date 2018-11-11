@@ -1824,6 +1824,78 @@ QString expandWhere(const QString &where, const QContactFilter &filter, const bo
 
 }
 
+QContactManager::Error ContactReader::readCollections()
+{
+    QMutexLocker locker(m_database.accessMutex());
+
+    QString join;
+    bool transientModifiedRequired = false;
+    bool globalPresenceRequired = false;
+    const QString orderBy = buildOrderBy(order, &join, &transientModifiedRequired, &globalPresenceRequired, m_database.localized());
+
+    bool failed = false;
+    QVariantList bindings;
+    QString where = buildWhere(filter, m_database, tableName, &bindings, &failed, &transientModifiedRequired, &globalPresenceRequired);
+    if (failed) {
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to create WHERE expression: invalid filter specification"));
+        return QContactManager::UnspecifiedError;
+    }
+
+    where = expandWhere(where, filter, m_database.aggregating());
+
+    if (transientModifiedRequired || globalPresenceRequired) {
+        // Provide the temporary transient state information to filter/sort on
+        if (!m_database.populateTemporaryTransientState(transientModifiedRequired, globalPresenceRequired)) {
+            return QContactManager::UnspecifiedError;
+        }
+
+        if (transientModifiedRequired) {
+            join.append(QStringLiteral(" LEFT JOIN temp.Timestamps ON Contacts.contactId = temp.Timestamps.contactId"));
+        }
+        if (globalPresenceRequired) {
+            join.append(QStringLiteral(" LEFT JOIN temp.GlobalPresenceStates ON Contacts.contactId = temp.GlobalPresenceStates.contactId"));
+        }
+    }
+
+    QString queryString = QString(QLatin1String(
+                "\n SELECT DISTINCT Contacts.contactId"
+                "\n FROM Contacts %1"
+                "\n %2")).arg(join).arg(where);
+    if (!orderBy.isEmpty()) {
+        queryString.append(QString::fromLatin1(" ORDER BY ") + orderBy);
+    }
+
+    QSqlQuery query(m_database);
+    query.setForwardOnly(true);
+    if (!query.prepare(queryString)) {
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to prepare contacts ids:\n%1\nQuery:\n%2")
+                .arg(query.lastError().text())
+                .arg(queryString));
+        return QContactManager::UnspecifiedError;
+    }
+
+    for (int i = 0; i < bindings.count(); ++i)
+        query.bindValue(i, bindings.at(i));
+
+    if (!ContactsDatabase::execute(query)) {
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to query contacts ids\n%1\nQuery:\n%2")
+                .arg(query.lastError().text())
+                .arg(queryString));
+        return QContactManager::UnspecifiedError;
+    } else {
+        debugFilterExpansion("Contact IDs selection:", queryString, bindings);
+    }
+
+    do {
+        for (int i = 0; i < ReportBatchSize && query.next(); ++i) {
+            contactIds->append(ContactId::apiId(query.value(0).toUInt()));
+        }
+        contactIdsAvailable(*contactIds);
+    } while (query.isValid());
+
+    return QContactManager::NoError;
+}
+
 QContactManager::Error ContactReader::readContacts(
         const QString &table,
         QList<QContact> *contacts,
