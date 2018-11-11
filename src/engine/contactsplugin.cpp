@@ -62,6 +62,8 @@ ContactsFactory::ContactsFactory()
 QContactManagerEngine *ContactsFactory::engine(
         const QMap<QString, QString> &parameters, QContactManager::Error* error)
 {
+    qDebug() << "Creating our engine";
+    qWarning() << "Creating our engine";
     ContactsEngine *engine = new ContactsEngine(managerName(), parameters);
     QContactManager::Error err = engine->open();
     if (error)

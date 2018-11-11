@@ -2788,6 +2788,7 @@ bool ContactsDatabase::localized() const
 
 bool ContactsDatabase::aggregating() const
 {
+    qDebug() << "Addregating:" << !m_nonprivileged;
     // Currently true only in the privileged database
     return !m_nonprivileged;
 }

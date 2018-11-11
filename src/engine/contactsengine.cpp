@@ -1004,6 +1004,7 @@ QList<QContact> ContactsEngine::contacts(
             const QContactFetchHint &fetchHint,
             QContactManager::Error* error) const
 {
+    qDebug() << Q_FUNC_INFO;
     QList<QContact> contacts;
 
     QContactManager::Error err = reader()->readContacts(
@@ -1025,6 +1026,7 @@ QList<QContact> ContactsEngine::contacts(
         QContactManager::Error *error) const
 {
     Q_UNUSED(errorMap);
+    qDebug() << Q_FUNC_INFO;
 
     return contacts(filter, sortOrders, fetchHint, error);
 }
@@ -1036,6 +1038,7 @@ QList<QContact> ContactsEngine::contacts(
             QContactManager::Error *error) const
 {
     Q_UNUSED(errorMap);
+    qDebug() << Q_FUNC_INFO;
 
     QList<QContact> contacts;
 
@@ -1054,6 +1057,7 @@ QContact ContactsEngine::contact(
         const QContactFetchHint &fetchHint,
         QContactManager::Error* error) const
 {
+    qDebug() << Q_FUNC_INFO;
     QMap<int, QContactManager::Error> errorMap;
 
     QList<QContact> contacts = ContactsEngine::contacts(
@@ -1077,6 +1081,7 @@ bool ContactsEngine::saveContacts(
             QMap<int, QContactManager::Error> *errorMap,
             QContactManager::Error *error)
 {
+    qDebug() << Q_FUNC_INFO << &contacts;
     QContactManager::Error err = writer()->save(contacts, definitionMask, 0, errorMap, false, false, false);
 
     if (error)

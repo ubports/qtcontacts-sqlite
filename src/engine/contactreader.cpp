@@ -1372,6 +1372,7 @@ static QString buildWhere(const QContactFilter &filter, ContactsDatabase &db, co
     Q_ASSERT(globalPresenceRequired);
     Q_ASSERT(transientModifiedRequired);
 
+    qDebug() << "Filter type:" << filter.type();
     switch (filter.type()) {
     case QContactFilter::DefaultFilter:
         return QString();
@@ -1606,33 +1607,41 @@ bool includesSyncTarget(const QContactFilter &filter);
 // Returns true if this filter includes a filter for specific syncTarget
 bool includesSyncTarget(const QList<QContactFilter> &filters)
 {
+        qDebug() << Q_FUNC_INFO;
     foreach (const QContactFilter &filter, filters) {
         if (includesSyncTarget(filter)) {
+        qDebug() << "returning true";
             return true;
         }
     }
+        qDebug() << "returning false";
     return false;
 }
 bool includesSyncTarget(const QContactIntersectionFilter &filter)
 {
+        qDebug() << Q_FUNC_INFO;
     return includesSyncTarget(filter.filters());
 }
 bool includesSyncTarget(const QContactUnionFilter &filter)
 {
+        qDebug() << Q_FUNC_INFO;
     return includesSyncTarget(filter.filters());
 }
 bool includesSyncTarget(const QContactDetailFilter &filter)
 {
+        qDebug() << Q_FUNC_INFO << "returning" << (filter.detailType() == QContactSyncTarget::Type);
     return filter.detailType() == QContactSyncTarget::Type;
 }
 bool includesSyncTarget(const QContactFilter &filter)
 {
+    qDebug() << Q_FUNC_INFO;
     switch (filter.type()) {
     case QContactFilter::DefaultFilter:
     case QContactFilter::ContactDetailRangeFilter:
     case QContactFilter::ChangeLogFilter:
     case QContactFilter::RelationshipFilter:
     case QContactFilter::IdFilter:
+        qDebug() << "returning false";
         return false;
 
     case QContactFilter::IntersectionFilter:
@@ -1644,6 +1653,7 @@ bool includesSyncTarget(const QContactFilter &filter)
 
     default:
         QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Cannot includesSyncTarget with unknown filter type %1").arg(filter.type()));
+        qDebug() << "returning false";
         return false;
     }
 }
@@ -1920,7 +1930,9 @@ QContactManager::Error ContactReader::readContacts(
         return QContactManager::UnspecifiedError;
     }
 
+    qDebug() << "Where is" << where;
     where = expandWhere(where, filter, m_database.aggregating());
+    qDebug() << "After expansion:" << where;
 
     if (transientModifiedRequired || globalPresenceRequired) {
         // Provide the temporary transient state information to filter/sort on

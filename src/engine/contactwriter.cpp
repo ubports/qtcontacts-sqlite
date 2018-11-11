@@ -2367,6 +2367,7 @@ QContactManager::Error ContactWriter::save(
             bool withinAggregateUpdate,
             bool withinSyncUpdate)
 {
+    qDebug() << Q_FUNC_INFO << &contacts;
     QMutexLocker locker(m_database.accessMutex());
 
     if (contacts->isEmpty())
@@ -2375,6 +2376,7 @@ QContactManager::Error ContactWriter::save(
     // Check that all of the contacts have the same sync target.
     // Note that empty == "local" for all intents and purposes.
     if (!withinAggregateUpdate && !withinSyncUpdate) {
+        qDebug() << "No aggregate update";
         QString batchSyncTarget;
         foreach (const QContact &contact, *contacts) {
             // retrieve current contact's sync target
@@ -2436,6 +2438,7 @@ QContactManager::Error ContactWriter::save(
     QContactManager::Error err = QContactManager::NoError;
     for (int i = 0; i < contacts->count(); ++i) {
         QContact &contact = (*contacts)[i];
+        qDebug() << "saving contact" << contact;
         QContactId contactId = ContactId::apiId(contact);
         quint32 dbId = ContactId::databaseId(contactId);
 
@@ -2489,6 +2492,7 @@ QContactManager::Error ContactWriter::save(
     if (!withinTransaction) {
         // only attempt to commit/rollback the transaction if we created it
         if (worstError != QContactManager::NoError) {
+            qDebug() << "rolling back";
             // If anything failed at all, we need to rollback, so that we do not
             // have an inconsistent state between aggregate and constituent contacts
 
@@ -2513,6 +2517,7 @@ QContactManager::Error ContactWriter::save(
             return QContactManager::UnspecifiedError;
         }
     }
+    qDebug() << "done" << m_addedIds << m_changedIds;
 
     return worstError;
 }
@@ -5228,6 +5233,8 @@ static bool updateTimestamp(QContact *contact, bool setCreationTimestamp)
 
 QContactManager::Error ContactWriter::create(QContact *contact, const DetailList &definitionMask, bool withinTransaction, bool withinAggregateUpdate)
 {
+    qWarning() << Q_FUNC_INFO;
+    qDebug() << Q_FUNC_INFO;
     // If not specified, this contact is a "local device" contact
     QContactSyncTarget starget = contact->detail<QContactSyncTarget>();
     const QString stv = starget.syncTarget();
@@ -5264,6 +5271,7 @@ QContactManager::Error ContactWriter::create(QContact *contact, const DetailList
     QContactManager::Error writeErr = enforceDetailConstraints(contact);
     if (writeErr != QContactManager::NoError) {
         QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Contact failed detail constraints"));
+        qDebug() << "error";
         return writeErr;
     }
 
@@ -5273,6 +5281,7 @@ QContactManager::Error ContactWriter::create(QContact *contact, const DetailList
         ContactsDatabase::Query query(bindContactDetails(*contact));
         if (!ContactsDatabase::execute(query)) {
             query.reportError("Failed to create contact");
+        qDebug() << "cretion failed";
             return QContactManager::UnspecifiedError;
         }
         contactId = query.lastInsertId().toUInt();
@@ -5306,6 +5315,7 @@ QContactManager::Error ContactWriter::create(QContact *contact, const DetailList
         }
     }
 
+    qDebug() << "creation successful";
     return writeErr;
 }
 
