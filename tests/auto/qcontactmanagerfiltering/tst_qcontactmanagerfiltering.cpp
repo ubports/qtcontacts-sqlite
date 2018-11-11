@@ -681,9 +681,13 @@ void tst_QContactManagerFiltering::deactivation()
     bob.saveDetail(&bn);
 
     // Alice must have a sync-target to be deactivated
-    QContactSyncTarget st;
-    st.setSyncTarget("test");
-    alice.saveDetail(&st);
+    QContactCollection collectionTest;
+    collectionTest.setMetaData(QContactCollection::KeyName,
+                               QStringLiteral("Test collection"));
+    collectionTest.setExtendedMetaData(QStringLiteral("syncTarget"),
+                                       QStringLiteral("test"));
+    QVERIFY(cm->saveCollection(&collectionTest));
+    alice.setCollectionId(collectionTest.id());
 
     QVERIFY(cm->saveContact(&alice));
     QVERIFY(cm->saveContact(&bob));

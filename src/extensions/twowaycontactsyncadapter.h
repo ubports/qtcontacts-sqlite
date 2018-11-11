@@ -54,7 +54,8 @@ public:
     enum ReadStateMode { ReadAllState, ReadPartialState };
 
     TwoWayContactSyncAdapter(const QString &syncTarget, const QMap<QString, QString> &params = QMap<QString, QString>());
-    TwoWayContactSyncAdapter(const QString &syncTarget, QContactManager &mananger);
+    TwoWayContactSyncAdapter(const QContactCollectionId &collectionId,
+                             QContactManager &mananger);
     virtual ~TwoWayContactSyncAdapter();
 
     // step one: init the sync adapter

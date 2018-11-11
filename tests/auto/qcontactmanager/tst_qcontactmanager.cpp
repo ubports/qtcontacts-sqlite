@@ -4589,11 +4589,12 @@ void tst_QContactManager::constituentOfSelf()
     QContactId selfId(ContactId::contactId(m->selfContactId()));
 
     // Create a contact which is aggregated by the self contact
-    QContactSyncTarget cst;
-    cst.setSyncTarget("test");
+    QContactCollection collection;
+    collection.setMetaData(QContactCollection::KeyName, "test");
+    QVERIFY(m->saveCollection(&collection));
 
     QContact constituent;
-    QVERIFY(constituent.saveDetail(&cst));
+    constituent.setCollectionId(collection.id());
 
     QVERIFY(m->saveContact(&constituent));
     QVERIFY(m->error() == QContactManager::NoError);

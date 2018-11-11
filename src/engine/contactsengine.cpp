@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <developers@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -105,6 +106,7 @@ public:
     virtual void updateState(QContactAbstractRequest::State state) = 0;
     virtual void setError(QContactManager::Error) {}
 
+    virtual void collectionsAvailable(const QList<QContactCollection> &) {}
     virtual void contactsAvailable(const QList<QContact> &) {}
     virtual void contactIdsAvailable(const QList<QContactId> &) {}
 
@@ -218,6 +220,128 @@ public:
 
 private:
     QList<QContactId> m_contactIds;
+    QMap<int, QContactManager::Error> m_errorMap;
+};
+
+class ContactCollectionFetchJob : public TemplateJob<QContactCollectionFetchRequest>
+{
+public:
+    ContactCollectionFetchJob(QContactCollectionFetchRequest *request)
+        : TemplateJob(request)
+    {
+    }
+
+    void execute(ContactReader *reader, WriterProxy &)
+    {
+        QList<QContactCollection> collections;
+        m_error = reader->readCollections(&collections);
+    }
+
+    void update(QMutex *mutex)
+    {
+        QList<QContactCollection> collections;
+        {
+            QMutexLocker locker(mutex);
+            collections = m_collections;
+        }
+        QContactManagerEngine::updateCollectionFetchRequest(
+                m_request,
+                collections,
+                QContactManager::NoError,
+                QContactAbstractRequest::ActiveState);
+    }
+
+    void updateState(QContactAbstractRequest::State state)
+    {
+        QContactManagerEngine::updateCollectionFetchRequest(m_request, m_collections, m_error, state);
+    }
+
+    void collectionsAvailable(const QList<QContactCollection> &collections) override
+    {
+        m_collections = collections;
+    }
+
+    QString description() const
+    {
+        QString s(QLatin1String("Fetch collections"));
+        return s;
+    }
+
+private:
+    QList<QContactCollection> m_collections;
+};
+
+class ContactCollectionSaveJob : public TemplateJob<QContactCollectionSaveRequest>
+{
+public:
+    ContactCollectionSaveJob(QContactCollectionSaveRequest *request)
+        : TemplateJob(request)
+        , m_collections(request->collections())
+    {
+    }
+
+    void execute(ContactReader *, WriterProxy &writer) override
+    {
+        m_error = writer->saveCollections(&m_collections, &m_errorMap);
+    }
+
+    void updateState(QContactAbstractRequest::State state) override
+    {
+        QContactManagerEngine::updateCollectionSaveRequest(m_request,
+                                                           m_collections,
+                                                           m_error,
+                                                           m_errorMap,
+                                                           state);
+    }
+
+    QString description() const override
+    {
+        QString s(QLatin1String("Save collections"));
+        foreach (const QContactCollection &c, m_collections) {
+            s.append(' ').append(c.id().toString());
+        }
+        return s;
+    }
+
+private:
+    QList<QContactCollection> m_collections;
+    QMap<int, QContactManager::Error> m_errorMap;
+};
+
+class ContactCollectionRemoveJob : public TemplateJob<QContactCollectionRemoveRequest>
+{
+public:
+    ContactCollectionRemoveJob(QContactCollectionRemoveRequest *request)
+        : TemplateJob(request)
+        , m_collectionIds(request->collectionIds())
+    {
+    }
+
+    void execute(ContactReader *, WriterProxy &writer) override
+    {
+        m_errorMap.clear();
+        m_error = writer->removeCollections(m_collectionIds, &m_errorMap);
+    }
+
+    void updateState(QContactAbstractRequest::State state) override
+    {
+        QContactManagerEngine::updateCollectionRemoveRequest(m_request,
+                                                             m_error,
+                                                             m_errorMap,
+                                                             state);
+    }
+
+    QString description() const override
+    {
+        QString s(QLatin1String("Remove collections"));
+        foreach (const QContactCollectionId &id, m_collectionIds) {
+            s.append(' ').append(id.toString());
+        }
+        return s;
+    }
+
+private:
+    QList<QContactCollectionId> m_collectionIds;
     QMap<int, QContactManager::Error> m_errorMap;
 };
 
@@ -685,6 +809,13 @@ public:
         }
     }
 
+    void collectionsAvailable(const QList<QContactCollection> &collections)
+    {
+        QMutexLocker locker(&m_mutex);
+        m_currentJob->collectionsAvailable(collections);
+        postUpdate();
+    }
+
     void contactsAvailable(const QList<QContact> &contacts)
     {
         QMutexLocker locker(&m_mutex);
@@ -756,10 +887,16 @@ private:
 class JobContactReader : public ContactReader
 {
 public:
-    JobContactReader(ContactsDatabase &database, JobThread *thread)
-        : ContactReader(database)
+    JobContactReader(ContactsDatabase &database, const QString &managerUri,
+                     JobThread *thread)
+        : ContactReader(database, managerUri)
         , m_thread(thread)
     {
+    }
+
+    void collectionsAvailable(const QList<QContactCollection> &collections) override
+    {
+        m_thread->collectionsAvailable(collections);
     }
 
     void contactsAvailable(const QList<QContact> &contacts) override
@@ -807,7 +944,7 @@ void JobThread::run()
         }
     } else {
         ContactNotifier notifier(m_nonprivileged);
-        JobContactReader reader(m_database, this);
+        JobContactReader reader(m_database, m_engine->managerUri(), this);
         Job::WriterProxy writer(*m_engine, m_database, notifier, reader);
 
         while (m_running) {
@@ -1122,6 +1259,69 @@ bool ContactsEngine::removeRelationships(
     return err == QContactManager::NoError;
 }
 
+QContactCollectionId ContactsEngine::defaultCollectionId() const
+{
+    return collectionId(QByteArray::number(1)); // local collection
+}
+
+QContactCollection ContactsEngine::collection(const QContactCollectionId &id,
+                                              QContactManager::Error *error)
+{
+    QList<QContactCollection> collections;
+    QList<QContactCollectionId> ids { id };
+
+    QContactManager::Error err =
+        reader()->readCollections(&collections, ids);
+    if (error)
+        *error = err;
+    return err == QContactManager::NoError ?
+        collections.first() : QContactCollection();
+}
+
+QList<QContactCollection> ContactsEngine::collections(
+        QContactManager::Error *error)
+{
+    QList<QContactCollection> collections;
+
+    QContactManager::Error err =
+        reader()->readCollections(&collections);
+    if (error)
+        *error = err;
+    return collections;
+}
+
+bool ContactsEngine::saveCollection(
+        QContactCollection *collection,
+        QContactManager::Error *error)
+{
+    QList<QContactCollection> collections { *collection };
+    QContactManager::Error err =
+        writer()->saveCollections(&collections, nullptr);
+
+    if (error)
+        *error = err;
+
+    if (err == QContactManager::NoError) {
+        *collection = collections.first();
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool ContactsEngine::removeCollection(const QContactCollectionId &collectionId,
+                                      QContactManager::Error *error)
+{
+    QList<QContactCollectionId> collectionIds { collectionId };
+
+    QContactManager::Error err =
+        writer()->removeCollections(collectionIds, nullptr);
+    if (error) {
+        *error = err;
+    }
+    return err == QContactManager::NoError;
+}
+
 void ContactsEngine::requestDestroyed(QContactAbstractRequest* req)
 {
     if (m_jobThread)
@@ -1139,6 +1339,17 @@ bool ContactsEngine::startRequest(QContactAbstractRequest* request)
     case QContactAbstractRequest::ContactRemoveRequest:
         job = new ContactRemoveJob(qobject_cast<QContactRemoveRequest *>(request));
         break;
+#ifdef NEW_QTPIM
+    case QContactAbstractRequest::CollectionFetchRequest:
+        job = new ContactCollectionFetchJob(qobject_cast<QContactCollectionFetchRequest *>(request));
+        break;
+    case QContactAbstractRequest::CollectionSaveRequest:
+        job = new ContactCollectionSaveJob(qobject_cast<QContactCollectionSaveRequest *>(request));
+        break;
+    case QContactAbstractRequest::CollectionRemoveRequest:
+        job = new ContactCollectionRemoveJob(qobject_cast<QContactCollectionRemoveRequest *>(request));
+        break;
+#endif
     case QContactAbstractRequest::ContactFetchRequest:
         job = new ContactFetchJob(qobject_cast<QContactFetchRequest *>(request));
         break;
@@ -1231,7 +1442,8 @@ bool ContactsEngine::fetchSyncContacts(const QString &syncTarget, const QDateTim
     return (*error == QContactManager::NoError);
 }
 
-bool ContactsEngine::storeSyncContacts(const QString &syncTarget, ConflictResolutionPolicy conflictPolicy,
+bool ContactsEngine::storeSyncContacts(const QContactCollectionId &collectionId,
+                                       ConflictResolutionPolicy conflictPolicy,
                                        const QList<QPair<QContact, QContact> > &remoteChanges, QContactManager::Error *error)
 {
     Q_ASSERT(error);
@@ -1240,16 +1452,18 @@ bool ContactsEngine::storeSyncContacts(const QString &syncTarget, ConflictResolu
 
     QList<QPair<QContact, QContact> > remoteChangesCopy(remoteChanges);
 
-    *error = writer()->updateSyncContacts(syncTarget, conflictPolicy, &remoteChangesCopy);
+    *error = writer()->updateSyncContacts(collectionId, conflictPolicy,
+                                          &remoteChangesCopy);
     return (*error == QContactManager::NoError);
 }
 
-bool ContactsEngine::storeSyncContacts(const QString &syncTarget, ConflictResolutionPolicy conflictPolicy,
+bool ContactsEngine::storeSyncContacts(const QContactCollectionId &collectionId,
+                                       ConflictResolutionPolicy conflictPolicy,
                                        QList<QPair<QContact, QContact> > *remoteChanges, QContactManager::Error *error)
 {
     Q_ASSERT(error);
 
-    *error = writer()->updateSyncContacts(syncTarget, conflictPolicy, remoteChanges);
+    *error = writer()->updateSyncContacts(collectionId, conflictPolicy, remoteChanges);
     return (*error == QContactManager::NoError);
 }
 
@@ -1482,7 +1696,8 @@ ContactsDatabase &ContactsEngine::database()
 ContactReader *ContactsEngine::reader() const
 {
     if (!m_synchronousReader) {
-        m_synchronousReader.reset(new ContactReader(const_cast<ContactsEngine *>(this)->database()));
+        m_synchronousReader.reset(new ContactReader(const_cast<ContactsEngine *>(this)->database(),
+                                                    managerUri()));
     }
     return m_synchronousReader.data();
 }

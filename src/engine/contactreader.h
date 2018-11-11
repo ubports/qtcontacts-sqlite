@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <developers@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -36,6 +37,7 @@
 #include "contactsdatabase.h"
 
 #include <QContact>
+#include <QContactCollection>
 #include <QContactManager>
 
 #include <QSqlDatabase>
@@ -46,8 +48,12 @@ QTCONTACTS_USE_NAMESPACE
 class ContactReader
 {
 public:
-    ContactReader(ContactsDatabase &database);
+    ContactReader(ContactsDatabase &database, const QString &managerUri);
     virtual ~ContactReader();
+
+    QContactManager::Error readCollections(
+            QList<QContactCollection> *collections,
+            const QList<QContactCollectionId> &ids = {});
 
     QContactManager::Error readContacts(
             const QString &table,
@@ -97,11 +103,13 @@ protected:
     QContactManager::Error queryContacts(
             const QString &table, QList<QContact> *contacts, const QContactFetchHint &fetchHint, bool relaxConstraints, QSqlQuery &query, QSqlQuery &relationshipQuery);
 
+    virtual void collectionsAvailable(const QList<QContactCollection> &collections);
     virtual void contactsAvailable(const QList<QContact> &contacts);
     virtual void contactIdsAvailable(const QList<QContactId> &contactIds);
 
 private:
     ContactsDatabase &m_database;
+    QString m_managerUri;
 };
 
 #endif
