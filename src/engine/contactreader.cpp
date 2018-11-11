@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <developers@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -65,6 +66,7 @@
 #include <QContactTimestamp>
 #include <QContactUrl>
 
+#include <QContactCollectionFilter>
 #include <QContactDetailFilter>
 #include <QContactDetailRangeFilter>
 #include <QContactIdFilter>
@@ -75,6 +77,7 @@
 
 #include <QContactManagerEngine>
 
+#include <QByteArray>
 #include <QSqlError>
 #include <QVector>
 
@@ -160,7 +163,7 @@ static const FieldInfo nameFields[] =
 
 static const FieldInfo syncTargetFields[] =
 {
-    { QContactSyncTarget::FieldSyncTarget, "syncTarget", StringField }
+    { QContactSyncTarget::FieldSyncTarget, "Collections.syncTarget", StringField }
 };
 
 static const FieldInfo timestampFields[] =
@@ -878,7 +881,10 @@ static QString convertFilterValueToString(const QContactDetailFilter &filter, co
 }
 
 static QString buildWhere(const QContactDetailFilter &filter, QVariantList *bindings,
-                          bool *failed, bool *transientModifiedRequired, bool *globalPresenceRequired)
+                          bool *failed,
+                          bool *transientModifiedRequired,
+                          bool *globalPresenceRequired,
+                          bool *collectionRequired)
 {
     if (filter.matchFlags() & QContactFilter::MatchKeypadCollation) {
         *failed = true;
@@ -905,8 +911,11 @@ static QString buildWhere(const QContactDetailFilter &filter, QVariantList *bind
         return QLatin1String("FAILED");
     }
 
+    bool filterOnSyncTarget =
+        filterOnField<QContactSyncTarget>(filter, QContactSyncTarget::FieldSyncTarget);
+    if (filterOnSyncTarget) *collectionRequired = true;
     if (!filter.value().isValid()     // "match if detail and field exists, don't care about value" filter
-        || (filterOnField<QContactSyncTarget>(filter, QContactSyncTarget::FieldSyncTarget) &&
+        || (filterOnSyncTarget &&
             filter.value().toString().isEmpty())) { // match all sync targets if empty sync target filter
         const QString comparison(QLatin1String("%1 IS NOT NULL"));
         return detail.where().arg(comparison.arg(field.column));
@@ -1230,6 +1239,35 @@ static QString buildWhere(const QContactIdFilter &filter, ContactsDatabase &db, 
     return statement + QLatin1String(")");
 }
 
+static QString buildWhere(const QContactCollectionFilter &filter,
+                          QVariantList *bindings,
+                          bool *failed)
+{
+    const QSet<QContactCollectionId> filterIds(filter.collectionIds());
+    if (filterIds.isEmpty()) {
+        *failed = true;
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Cannot buildWhere with empty collection ID list"));
+        return QLatin1String("FALSE");
+    }
+
+    QList<quint32> dbIds;
+    dbIds.reserve(filterIds.count());
+    bindings->reserve(filterIds.count());
+
+    Q_FOREACH(const QContactCollectionId &id, filterIds) {
+        dbIds.append(id.localId().toUInt());
+    }
+
+    QString statement = QLatin1String("Contacts.collectionId IN (?");
+    bindings->append(dbIds.first());
+
+    for (int i = 1; i < dbIds.count(); ++i) {
+        statement += QLatin1String(",?");
+        bindings->append(dbIds.at(i));
+    }
+    return statement + QLatin1String(")");
+}
+
 static QString buildWhere(const QContactRelationshipFilter &filter, QVariantList *bindings, bool *failed)
 {
 #ifdef NEW_QTPIM
@@ -1328,10 +1366,16 @@ static QString buildWhere(const QContactChangeLogFilter &filter, QVariantList *b
 }
 
 static QString buildWhere(const QContactFilter &filter, ContactsDatabase &db, const QString &table, QVariantList *bindings,
-                          bool *failed, bool *transientModifiedRequired, bool *globalPresenceRequired);
+                          bool *failed,
+                          bool *transientModifiedRequired,
+                          bool *globalPresenceRequired,
+                          bool *collectionRequired);
 
 static QString buildWhere(const QContactUnionFilter &filter, ContactsDatabase &db, const QString &table, QVariantList *bindings,
-                          bool *failed, bool *transientModifiedRequired, bool *globalPresenceRequired)
+                          bool *failed,
+                          bool *transientModifiedRequired,
+                          bool *globalPresenceRequired,
+                          bool *collectionRequired)
 {
     const QList<QContactFilter> filters  = filter.filters();
     if (filters.isEmpty())
@@ -1339,7 +1383,10 @@ static QString buildWhere(const QContactUnionFilter &filter, ContactsDatabase &d
 
     QStringList fragments;
     foreach (const QContactFilter &filter, filters) {
-        const QString fragment = buildWhere(filter, db, table, bindings, failed, transientModifiedRequired, globalPresenceRequired);
+        const QString fragment = buildWhere(filter, db, table, bindings, failed,
+                                            transientModifiedRequired,
+                                            globalPresenceRequired,
+                                            collectionRequired);
         if (!*failed && !fragment.isEmpty()) {
             fragments.append(fragment);
         }
@@ -1349,7 +1396,10 @@ static QString buildWhere(const QContactUnionFilter &filter, ContactsDatabase &d
 }
 
 static QString buildWhere(const QContactIntersectionFilter &filter, ContactsDatabase &db, const QString &table, QVariantList *bindings,
-                          bool *failed, bool *transientModifiedRequired, bool *globalPresenceRequired)
+                          bool *failed,
+                          bool *transientModifiedRequired,
+                          bool *globalPresenceRequired,
+                          bool *collectionRequired)
 {
     const QList<QContactFilter> filters  = filter.filters();
     if (filters.isEmpty())
@@ -1357,7 +1407,10 @@ static QString buildWhere(const QContactIntersectionFilter &filter, ContactsData
 
     QStringList fragments;
     foreach (const QContactFilter &filter, filters) {
-        const QString fragment = buildWhere(filter, db, table, bindings, failed, transientModifiedRequired, globalPresenceRequired);
+        const QString fragment = buildWhere(filter, db, table, bindings, failed,
+                                            transientModifiedRequired,
+                                            globalPresenceRequired,
+                                            collectionRequired);
         if (filter.type() != QContactFilter::DefaultFilter && !*failed) {
             // default filter gets special (permissive) treatment by the intersection filter.
             fragments.append(fragment.isEmpty() ? QLatin1String("NULL") : fragment);
@@ -1368,7 +1421,10 @@ static QString buildWhere(const QContactIntersectionFilter &filter, ContactsData
 }
 
 static QString buildWhere(const QContactFilter &filter, ContactsDatabase &db, const QString &table, QVariantList *bindings,
-                          bool *failed, bool *transientModifiedRequired, bool *globalPresenceRequired)
+                          bool *failed,
+                          bool *transientModifiedRequired,
+                          bool *globalPresenceRequired,
+                          bool *collectionRequired)
 {
     Q_ASSERT(failed);
     Q_ASSERT(globalPresenceRequired);
@@ -1377,8 +1433,15 @@ static QString buildWhere(const QContactFilter &filter, ContactsDatabase &db, co
     switch (filter.type()) {
     case QContactFilter::DefaultFilter:
         return QString();
+    case QContactFilter::CollectionFilter:
+        return buildWhere(static_cast<const QContactCollectionFilter &>(filter),
+                          bindings, failed);
     case QContactFilter::ContactDetailFilter:
-        return buildWhere(static_cast<const QContactDetailFilter &>(filter), bindings, failed, transientModifiedRequired, globalPresenceRequired);
+        return buildWhere(static_cast<const QContactDetailFilter &>(filter),
+                          bindings, failed,
+                          transientModifiedRequired,
+                          globalPresenceRequired,
+                          collectionRequired);
     case QContactFilter::ContactDetailRangeFilter:
         return buildWhere(static_cast<const QContactDetailRangeFilter &>(filter), bindings, failed);
     case QContactFilter::ChangeLogFilter:
@@ -1386,9 +1449,17 @@ static QString buildWhere(const QContactFilter &filter, ContactsDatabase &db, co
     case QContactFilter::RelationshipFilter:
         return buildWhere(static_cast<const QContactRelationshipFilter &>(filter), bindings, failed);
     case QContactFilter::IntersectionFilter:
-        return buildWhere(static_cast<const QContactIntersectionFilter &>(filter), db, table, bindings, failed, transientModifiedRequired, globalPresenceRequired);
+        return buildWhere(static_cast<const QContactIntersectionFilter &>(filter),
+                          db, table, bindings, failed,
+                          transientModifiedRequired,
+                          globalPresenceRequired,
+                          collectionRequired);
     case QContactFilter::UnionFilter:
-        return buildWhere(static_cast<const QContactUnionFilter &>(filter), db, table, bindings, failed, transientModifiedRequired, globalPresenceRequired);
+        return buildWhere(static_cast<const QContactUnionFilter &>(filter),
+                          db, table, bindings, failed,
+                          transientModifiedRequired,
+                          globalPresenceRequired,
+                          collectionRequired);
     case QContactFilter::IdFilter:
         return buildWhere(static_cast<const QContactIdFilter &>(filter), db, table, bindings, failed);
     default:
@@ -1533,8 +1604,9 @@ static void debugFilterExpansion(const QString &description, const QString &quer
     }
 }
 
-ContactReader::ContactReader(ContactsDatabase &database)
-    : m_database(database)
+ContactReader::ContactReader(ContactsDatabase &database,
+                             const QString &managerUri)
+    : m_database(database), m_managerUri(managerUri)
 {
 }
 
@@ -1587,6 +1659,7 @@ bool includesSelfId(const QContactFilter &filter)
 {
     switch (filter.type()) {
     case QContactFilter::DefaultFilter:
+    case QContactFilter::CollectionFilter:
     case QContactFilter::ContactDetailFilter:
     case QContactFilter::ContactDetailRangeFilter:
     case QContactFilter::ChangeLogFilter:
@@ -1640,6 +1713,9 @@ bool includesSyncTarget(const QContactFilter &filter)
     case QContactFilter::IdFilter:
         return false;
 
+    case QContactFilter::CollectionFilter:
+        return true;
+
     case QContactFilter::IntersectionFilter:
         return includesSyncTarget(static_cast<const QContactIntersectionFilter &>(filter));
     case QContactFilter::UnionFilter:
@@ -1688,6 +1764,7 @@ bool includesDeactivated(const QContactFilter &filter)
     switch (filter.type()) {
     case QContactFilter::IdFilter:
     case QContactFilter::DefaultFilter:
+    case QContactFilter::CollectionFilter:
     case QContactFilter::ContactDetailRangeFilter:
     case QContactFilter::ChangeLogFilter:
     case QContactFilter::RelationshipFilter:
@@ -1730,6 +1807,7 @@ bool includesIdFilter(const QContactFilter &filter)
 {
     switch (filter.type()) {
     case QContactFilter::DefaultFilter:
+    case QContactFilter::CollectionFilter:
     case QContactFilter::ContactDetailFilter:
     case QContactFilter::ContactDetailRangeFilter:
     case QContactFilter::ChangeLogFilter:
@@ -1790,7 +1868,7 @@ QString expandWhere(const QString &where, const QContactFilter &filter, const bo
         if (aggregating) {
             // exclude non-aggregates, unless the filter specifies syncTarget
             if (!includesSyncTarget(filter)) {
-                constraints.append("Contacts.syncTarget = 'aggregate' ");
+                constraints.append("Contacts.collectionId = 2 ");
             }
         }
 
@@ -1829,6 +1907,88 @@ QString expandWhere(const QString &where, const QContactFilter &filter, const bo
 
 }
 
+QContactManager::Error ContactReader::readCollections(
+        QList<QContactCollection> *collections,
+        const QList<QContactCollectionId> &ids)
+{
+    QMutexLocker locker(m_database.accessMutex());
+
+    const QString queryFields(QStringLiteral(
+        "SELECT "
+            "collectionId,"
+            "isDefault,"
+            "isReadOnly,"
+            "name,"
+            "description,"
+            "color,"
+            "secondaryColor,"
+            "image,"
+            "syncTarget,"
+            "extended "
+        "FROM Collections"
+    ));
+    const QString orderBy(QStringLiteral(" ORDER BY collectionId ASC"));
+    const QString where(QStringLiteral(" WHERE collectionId IN ('%1')"));
+
+    QString queryString;
+    if (ids.isEmpty()) {
+        queryString = queryFields + orderBy;
+    } else {
+        QStringList dbIds;
+        dbIds.reserve(ids.count());
+        for (const QContactCollectionId &id: ids) {
+            QString dbId = QString::number(id.localId().toUInt());
+            dbIds.append(dbId);
+        }
+        QString idsString = dbIds.join(',');
+        queryString = queryFields + where.arg(idsString) + orderBy;
+    }
+
+    QSqlQuery query(m_database);
+    query.setForwardOnly(true);
+    if (!query.prepare(queryString)) {
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to prepare collection:\n%1\nQuery:\n%2")
+                .arg(query.lastError().text())
+                .arg(queryString));
+        return QContactManager::UnspecifiedError;
+    }
+
+    if (!ContactsDatabase::execute(query)) {
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to query contacts ids\n%1\nQuery:\n%2")
+                .arg(query.lastError().text())
+                .arg(queryString));
+        return QContactManager::UnspecifiedError;
+    }
+
+    while (query.next()) {
+        int col = 0;
+        quint32 dbId = query.value(col++).toUInt();
+
+        QContactCollectionId id(m_managerUri, QByteArray::number(dbId));
+        QContactCollection collection;
+        collection.setId(id);
+        col++; // TODO: handle isDefault
+        col++; // TODO: handle isReadOnly
+        collection.setMetaData(QContactCollection::KeyName, query.value(col++));
+        collection.setMetaData(QContactCollection::KeyDescription,
+                               query.value(col++));
+        collection.setMetaData(QContactCollection::KeyColor, query.value(col++));
+        collection.setMetaData(QContactCollection::KeySecondaryColor,
+                               query.value(col++));
+        collection.setMetaData(QContactCollection::KeyImage, query.value(col++));
+        collection.setExtendedMetaData(QStringLiteral("syncTarget"),
+                                       query.value(col++));
+        // FIXME TODO load extended metadata
+        collections->append(collection);
+    }
+
+    if (!collections->isEmpty()) {
+        collectionsAvailable(*collections);
+    }
+
+    return QContactManager::NoError;
+}
+
 QContactManager::Error ContactReader::readContacts(
         const QString &table,
         QList<QContact> *contacts,
@@ -1843,11 +2003,16 @@ QContactManager::Error ContactReader::readContacts(
     QString join;
     bool transientModifiedRequired = false;
     bool globalPresenceRequired = false;
+    bool collectionRequired = false;
     const QString orderBy = buildOrderBy(order, &join, &transientModifiedRequired, &globalPresenceRequired, m_database.localized());
 
     bool whereFailed = false;
     QVariantList bindings;
-    QString where = buildWhere(filter, m_database, table, &bindings, &whereFailed, &transientModifiedRequired, &globalPresenceRequired);
+    QString where = buildWhere(filter, m_database, table, &bindings,
+                               &whereFailed,
+                               &transientModifiedRequired,
+                               &globalPresenceRequired,
+                               &collectionRequired);
     if (whereFailed) {
         QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to create WHERE expression: invalid filter specification"));
         return QContactManager::UnspecifiedError;
@@ -1867,6 +2032,12 @@ QContactManager::Error ContactReader::readContacts(
         if (globalPresenceRequired) {
             join.append(QStringLiteral(" LEFT JOIN temp.GlobalPresenceStates ON Contacts.contactId = temp.GlobalPresenceStates.contactId"));
         }
+    }
+
+    if (collectionRequired) {
+        join.append(QStringLiteral(
+            " JOIN Collections ON Collections.collectionId = Contacts.collectionId"
+        ));
     }
 
     const int maximumCount = fetchHint.maxCountHint();
@@ -1951,6 +2122,7 @@ QContactManager::Error ContactReader::queryContacts(
     const QString idsQueryStatement(QString::fromLatin1(
         "SELECT " // order and content can change due to schema upgrades, so list manually.
             "Contacts.contactId, "
+            "Contacts.collectionId, "
             "Contacts.displayLabel, "
             "Contacts.displayLabelGroup, "
             "Contacts.firstName, "
@@ -1961,7 +2133,7 @@ QContactManager::Error ContactReader::queryContacts(
             "Contacts.prefix, "
             "Contacts.suffix, "
             "Contacts.customLabel, "
-            "Contacts.syncTarget, "
+            "Collections.syncTarget, "
             "Contacts.created, "
             "Contacts.modified, "
             "Contacts.gender, "
@@ -1975,6 +2147,7 @@ QContactManager::Error ContactReader::queryContacts(
             "Contacts.type "
         "FROM temp.%1 "
         "CROSS JOIN Contacts ON temp.%1.contactId = Contacts.contactId " // Cross join ensures we scan the temp table first
+        "JOIN Collections ON Collections.collectionId = Contacts.collectionId "
         "ORDER BY temp.%1.rowId ASC").arg(tableName));
 
     const QString relationshipQueryStatement(QString::fromLatin1(
@@ -2153,6 +2326,11 @@ QContactManager::Error ContactReader::queryContacts(
 
         QContactId id(ContactId::contactId(ContactId::apiId(dbId)));
         contact.setId(id);
+
+        quint32 dbCollectionId = contactQuery.value(col++).toUInt();
+        QContactCollectionId collectionId(m_managerUri,
+                                          QByteArray::number(dbCollectionId));
+        contact.setCollectionId(collectionId);
 
         QString persistedDL = contactQuery.value(col++).toString();
         QString displayLabelGroup = contactQuery.value(col++).toString();
@@ -2470,11 +2648,15 @@ QContactManager::Error ContactReader::readContactIds(
     QString join;
     bool transientModifiedRequired = false;
     bool globalPresenceRequired = false;
+    bool collectionRequired = false;
     const QString orderBy = buildOrderBy(order, &join, &transientModifiedRequired, &globalPresenceRequired, m_database.localized());
 
     bool failed = false;
     QVariantList bindings;
-    QString where = buildWhere(filter, m_database, tableName, &bindings, &failed, &transientModifiedRequired, &globalPresenceRequired);
+    QString where = buildWhere(filter, m_database, tableName, &bindings, &failed,
+                               &transientModifiedRequired,
+                               &globalPresenceRequired,
+                               &collectionRequired);
     if (failed) {
         QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to create WHERE expression: invalid filter specification"));
         return QContactManager::UnspecifiedError;
@@ -2494,6 +2676,12 @@ QContactManager::Error ContactReader::readContactIds(
         if (globalPresenceRequired) {
             join.append(QStringLiteral(" LEFT JOIN temp.GlobalPresenceStates ON Contacts.contactId = temp.GlobalPresenceStates.contactId"));
         }
+    }
+
+    if (collectionRequired) {
+        join.append(QStringLiteral(
+            " JOIN Collections ON Collections.collectionId = Contacts.collectionId"
+        ));
     }
 
     QString queryString = QString(QLatin1String(
@@ -2720,6 +2908,10 @@ bool ContactReader::fetchOOBKeys(const QString &scope, QStringList *keys)
     query.finish();
 
     return true;
+}
+
+void ContactReader::collectionsAvailable(const QList<QContactCollection> &)
+{
 }
 
 void ContactReader::contactsAvailable(const QList<QContact> &)

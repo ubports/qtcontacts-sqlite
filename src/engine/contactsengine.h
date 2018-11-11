@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <developers@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -141,6 +142,15 @@ public:
             QMap<int, QContactManager::Error> *errorMap,
             QContactManager::Error *error) override;
 
+    QContactCollectionId defaultCollectionId() const override;
+    QContactCollection collection(const QContactCollectionId &collectionId,
+                                  QContactManager::Error *error) override;
+    QList<QContactCollection> collections(QContactManager::Error *error) override;
+    bool saveCollection(QContactCollection *collection,
+                        QContactManager::Error *error) override;
+    bool removeCollection(const QContactCollectionId &collectionId,
+                          QContactManager::Error *error) override;
+
     void requestDestroyed(QContactAbstractRequest* req) override;
     bool startRequest(QContactAbstractRequest* req) override;
     bool cancelRequest(QContactAbstractRequest* req) override;
@@ -158,10 +168,12 @@ public:
                            QList<QContact> *syncContacts, QList<QContact> *addedContacts, QList<QContactId> *deletedContactIds,
                            QDateTime *maxTimestamp, QContactManager::Error *error);
 
-    bool storeSyncContacts(const QString &syncTarget, ConflictResolutionPolicy conflictPolicy,
-                           const QList<QPair<QContact, QContact> > &remoteChanges, QContactManager::Error *error);
-    bool storeSyncContacts(const QString &syncTarget, ConflictResolutionPolicy conflictPolicy,
-                           QList<QPair<QContact, QContact> > *remoteChanges, QContactManager::Error *error);
+    bool storeSyncContacts(const QContactCollectionId &collectionId,
+                           ConflictResolutionPolicy conflictPolicy,
+                           const QList<QPair<QContact, QContact> > &remoteChanges, QContactManager::Error *error) override;
+    bool storeSyncContacts(const QContactCollectionId &collectionId,
+                           ConflictResolutionPolicy conflictPolicy,
+                           QList<QPair<QContact, QContact> > *remoteChanges, QContactManager::Error *error) override;
 
     bool fetchOOB(const QString &scope, const QString &key, QVariant *value);
     bool fetchOOB(const QString &scope, const QStringList &keys, QMap<QString, QVariant> *values);

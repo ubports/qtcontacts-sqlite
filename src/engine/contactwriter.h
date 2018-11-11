@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <developers@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -44,6 +45,7 @@
 #include <QContactAnniversary>
 #include <QContactAvatar>
 #include <QContactBirthday>
+#include <QContactChangeSet>
 #include <QContactEmailAddress>
 #include <QContactExtendedDetail>
 #include <QContactGlobalPresence>
@@ -74,6 +76,13 @@ public:
 
     ContactWriter(ContactsEngine &engine, ContactsDatabase &database, ContactNotifier *notifier, ContactReader *reader);
     ~ContactWriter();
+
+    QContactManager::Error saveCollections(
+            QList<QContactCollection> *collections,
+            QMap<int, QContactManager::Error> *errorMap);
+    QContactManager::Error removeCollections(
+            const QList<QContactCollectionId> &collectionIds,
+            QMap<int, QContactManager::Error> *errorMap);
 
     QContactManager::Error save(
             QList<QContact> *contacts,
@@ -107,7 +116,7 @@ public:
                                              QList<QContact> *syncContacts, QList<QContact> *addedContacts, QList<QContactId> *deletedContactIds,
                                              QDateTime *maxTimestamp);
 
-    QContactManager::Error updateSyncContacts(const QString &syncTarget,
+    QContactManager::Error updateSyncContacts(const QContactCollectionId &collectionId,
                                               QtContactsSqliteExtensions::ContactManagerEngine::ConflictResolutionPolicy conflictPolicy,
                                               QList<QPair<QContact, QContact> > *remoteChanges);
 
@@ -118,6 +127,10 @@ private:
     bool beginTransaction();
     bool commitTransaction();
     void rollbackTransaction();
+
+    QContactManager::Error removeCollection(
+            const QContactCollectionId &collectionId,
+            QContactChangeSet &changeSet);
 
     QContactManager::Error create(QContact *contact, const DetailList &definitionMask, bool withinTransaction, bool withinAggregateUpdate);
     QContactManager::Error update(QContact *contact, const DetailList &definitionMask, bool *aggregateUpdated, bool withinTransaction, bool withinAggregateUpdate, bool transientUpdate);
@@ -138,11 +151,13 @@ private:
     QContactManager::Error aggregateOrphanedContacts(bool withinTransaction);
     QContactManager::Error recordAffectedSyncTargets(const QVariantList &ids);
 
+    QString syncTargetFromCollectionId(quint32 dbCollectionId);
+    quint32 collectionIdFromSyncTarget(const QString &syncTarget);
     QContactManager::Error syncFetch(const QString &syncTarget, const QDateTime &lastSync, const QSet<quint32> &exportedIds,
                                      QList<QContact> *syncContacts, QList<QContact> *addedContacts, QList<QContactId> *deletedContactIds,
                                      QDateTime *maxTimestamp);
 
-    QContactManager::Error syncUpdate(const QString &syncTarget,
+    QContactManager::Error syncUpdate(const QContactCollectionId &collectionId,
                                       QtContactsSqliteExtensions::ContactManagerEngine::ConflictResolutionPolicy conflictPolicy,
                                       QList<QPair<QContact, QContact> > *remoteChanges);
 

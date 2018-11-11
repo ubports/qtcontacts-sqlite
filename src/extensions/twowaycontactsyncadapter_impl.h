@@ -140,13 +140,19 @@ namespace QtContactsSqliteExtensions {
         };
 
         TwoWayContactSyncAdapterPrivate(TwoWayContactSyncAdapter *q, const QString &syncTarget, const QMap<QString, QString> &params);
-        TwoWayContactSyncAdapterPrivate(TwoWayContactSyncAdapter *q, const QString &syncTarget, QContactManager &manager);
+        TwoWayContactSyncAdapterPrivate(TwoWayContactSyncAdapter *q,
+                                        const QContactCollectionId &collectionId,
+                                        QContactManager &manager);
        ~TwoWayContactSyncAdapterPrivate();
+
+        void readCollection();
+        void readSyncTarget();
 
         TwoWayContactSyncAdapter *m_q;
         QContactManager *m_manager;
         ContactManagerEngine *m_engine;
         QString m_syncTarget;
+        QContactCollectionId m_collectionId;
         bool m_deleteManager;
 
         bool readStateData(const QString &accountId, ReadMode mode);
@@ -545,7 +551,7 @@ QPair<QList<QContactDetail>, QList<QContactDetail> > fallbackDelta(const QContac
     return QPair<QList<QContactDetail>, QList<QContactDetail> >(pdets, cdets);
 }
 
-}
+} // namespace
 
 TwoWayContactSyncAdapterPrivate::TwoWayContactSyncAdapterPrivate(TwoWayContactSyncAdapter *q, const QString &syncTarget, const QMap<QString, QString> &params)
     : m_q(q)
@@ -555,22 +561,53 @@ TwoWayContactSyncAdapterPrivate::TwoWayContactSyncAdapterPrivate(TwoWayContactSy
     , m_deleteManager(true)
 {
     registerTypes();
+    readCollection();
 }
 
-TwoWayContactSyncAdapterPrivate::TwoWayContactSyncAdapterPrivate(TwoWayContactSyncAdapter *q, const QString &syncTarget, QContactManager &manager)
+TwoWayContactSyncAdapterPrivate::TwoWayContactSyncAdapterPrivate(TwoWayContactSyncAdapter *q,
+                                                                 const QContactCollectionId &collectionId,
+                                                                 QContactManager &manager)
     : m_q(q)
     , m_manager(&manager)
     , m_engine(contactManagerEngine(*m_manager))
-    , m_syncTarget(syncTarget)
+    , m_collectionId(collectionId)
     , m_deleteManager(false)
 {
     registerTypes();
+    readSyncTarget();
 }
 
 TwoWayContactSyncAdapterPrivate::~TwoWayContactSyncAdapterPrivate()
 {
     if (m_deleteManager) {
         delete m_manager;
+    }
+}
+
+void TwoWayContactSyncAdapterPrivate::readCollection()
+{
+    const QList<QContactCollection> collections = m_manager->collections();
+
+    for (const QContactCollection &collection: collections) {
+        QString syncTarget =
+            collection.extendedMetaData(QStringLiteral("syncTarget")).toString();
+        if (syncTarget == m_syncTarget) {
+            m_collectionId = collection.id();
+            break;
+        }
+    }
+    if (Q_UNLIKELY(m_collectionId.isNull())) {
+        qWarning() << "Couldn't read collection from syncTarget" << m_syncTarget;
+    }
+}
+
+void TwoWayContactSyncAdapterPrivate::readSyncTarget()
+{
+    QContactCollection collection = m_manager->collection(m_collectionId);
+    m_syncTarget =
+        collection.extendedMetaData(QStringLiteral("syncTarget")).toString();
+    if (Q_UNLIKELY(m_syncTarget.isEmpty())) {
+        qWarning() << "Couldn't read sync target from collection" << collection;
     }
 }
 
@@ -958,8 +995,9 @@ TwoWayContactSyncAdapter::TwoWayContactSyncAdapter(const QString &syncTarget, co
 {
 }
 
-TwoWayContactSyncAdapter::TwoWayContactSyncAdapter(const QString &syncTarget, QContactManager &manager)
-    : d(new TwoWayContactSyncAdapterPrivate(this, syncTarget, manager))
+TwoWayContactSyncAdapter::TwoWayContactSyncAdapter(const QContactCollectionId &collectionId,
+                                                   QContactManager &manager)
+    : d(new TwoWayContactSyncAdapterPrivate(this, collectionId, manager))
 {
 }
 
@@ -1085,7 +1123,7 @@ bool TwoWayContactSyncAdapter::storeRemoteChanges(const QList<QContact> &deleted
     // in the next qtcontacts-sqlite fetchSyncContacts() call (in the sixth step).
     QContactManager::Error error;
     if (syncContactUpdates.size()) {
-        if (!d->m_engine->storeSyncContacts(d->m_syncTarget,
+        if (!d->m_engine->storeSyncContacts(d->m_collectionId,
                                             QtContactsSqliteExtensions::ContactManagerEngine::PreserveLocalChanges,
                                             &syncContactUpdates,
                                             &error)) {

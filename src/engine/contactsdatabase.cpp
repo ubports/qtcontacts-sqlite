@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <developers@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -63,9 +64,23 @@ static const char *setupJournal =
 static const char *setupSynchronous =
         "\n PRAGMA synchronous = FULL;";
 
+static const char *createCollectionsTable =
+        "\n CREATE TABLE Collections ("
+        "\n collectionId INTEGER PRIMARY KEY ASC AUTOINCREMENT,"
+        "\n isDefault BOOL DEFAULT 0,"
+        "\n isReadOnly BOOL DEFAULT 0,"
+        "\n name TEXT,"
+        "\n description TEXT,"
+        "\n color INT,"                 // QColor::rgba()
+        "\n secondaryColor INT,"
+        "\n image TEXT,"                // URL
+        "\n syncTarget TEXT,"
+        "\n extended BLOB);";
+
 static const char *createContactsTable =
         "\n CREATE TABLE Contacts ("
         "\n contactId INTEGER PRIMARY KEY ASC AUTOINCREMENT,"
+        "\n collectionId INTEGER KEY ASC REFERENCES Collections (collectionId),"
         "\n displayLabel TEXT,"
         "\n displayLabelGroup TEXT,"
         "\n displayLabelGroupSortOrder INTEGER,"
@@ -77,7 +92,6 @@ static const char *createContactsTable =
         "\n prefix TEXT,"
         "\n suffix TEXT,"
         "\n customLabel TEXT,"
-        "\n syncTarget TEXT NOT NULL,"
         "\n created DATETIME,"
         "\n modified DATETIME,"
         "\n gender TEXT,"               // Contains an INTEGER represented as TEXT
@@ -286,6 +300,9 @@ static const char *createDetailsTable =
         "\n modifiable BOOL,"
         "\n nonexportable BOOL);";
 
+static const char *createCollectionIndex =
+        "\n CREATE INDEX CollectionIndex ON Contacts(collectionId, contactId);";
+
 static const char *createDetailsRemoveIndex =
         "\n CREATE INDEX DetailsRemoveIndex ON Details(contactId, detail);";
 
@@ -356,6 +373,15 @@ static const char *createOOBTable =
         "\n value BLOB,"
         "\n compressed INTEGER DEFAULT 0);";
 
+static const char *createCollectionRemoveTrigger =
+        "\n CREATE TRIGGER RemoveCollection"
+        "\n BEFORE DELETE"
+        "\n ON Collections"
+        "\n BEGIN"
+        "\n  DELETE FROM Contacts WHERE collectionId = old.collectionId;"
+        "\n END;";
+        // TODO: should we have a DeletedCollections table?
+
 static const char *createDbSettingsTable =
         "\n CREATE TABLE DbSettings ("
         "\n name TEXT PRIMARY KEY,"
@@ -366,7 +392,10 @@ static const char *createRemoveTrigger =
         "\n BEFORE DELETE"
         "\n ON Contacts"
         "\n BEGIN"
-        "\n  INSERT INTO DeletedContacts (contactId, syncTarget, deleted) VALUES (old.contactId, old.syncTarget, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));"
+        "\n  INSERT INTO DeletedContacts (contactId, syncTarget, deleted)"
+            "SELECT contactId, C.syncTarget, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM Contacts"
+            " JOIN Collections AS C ON C.collectionId = old.collectionId"
+            " WHERE contactId = old.contactId;"
         "\n  DELETE FROM Addresses WHERE contactId = old.contactId;"
         "\n  DELETE FROM Anniversaries WHERE contactId = old.contactId;"
         "\n  DELETE FROM Avatars WHERE contactId = old.contactId;"
@@ -393,9 +422,29 @@ static const char *createRemoveTrigger =
         "\n  DELETE FROM Relationships WHERE firstId = old.contactId OR secondId = old.contactId;"
         "\n END;";
 
+static const char *createLocalCollection =
+        "\n INSERT INTO Collections ("
+        "\n collectionId,"
+        "\n isDefault,"
+        "\n syncTarget)"
+        "\n VALUES ("
+        "\n 1,"
+        "\n 1,"
+        "\n 'local');";
+static const char *createAggregateCollection =
+        "\n INSERT INTO Collections ("
+        "\n collectionId,"
+        "\n isReadOnly,"
+        "\n syncTarget)"
+        "\n VALUES ("
+        "\n 2,"
+        "\n 1,"
+        "\n 'aggregate');";
+
 static const char *createLocalSelfContact =
         "\n INSERT INTO Contacts ("
         "\n contactId,"
+        "\n collectionId,"
         "\n displayLabel,"
         "\n firstName,"
         "\n lowerFirstName,"
@@ -405,12 +454,12 @@ static const char *createLocalSelfContact =
         "\n prefix,"
         "\n suffix,"
         "\n customLabel,"
-        "\n syncTarget,"
         "\n created,"
         "\n modified,"
         "\n gender,"
         "\n isFavorite)"
         "\n VALUES ("
+        "\n 1,"
         "\n 1,"
         "\n '',"
         "\n '',"
@@ -421,7 +470,6 @@ static const char *createLocalSelfContact =
         "\n '',"
         "\n '',"
         "\n '',"
-        "\n 'local',"
         "\n '',"
         "\n '',"
         "\n '',"
@@ -429,6 +477,7 @@ static const char *createLocalSelfContact =
 static const char *createAggregateSelfContact =
         "\n INSERT INTO Contacts ("
         "\n contactId,"
+        "\n collectionId,"
         "\n displayLabel,"
         "\n firstName,"
         "\n lowerFirstName,"
@@ -438,12 +487,12 @@ static const char *createAggregateSelfContact =
         "\n prefix,"
         "\n suffix,"
         "\n customLabel,"
-        "\n syncTarget,"
         "\n created,"
         "\n modified,"
         "\n gender,"
         "\n isFavorite)"
         "\n VALUES ("
+        "\n 2,"
         "\n 2,"
         "\n '',"
         "\n '',"
@@ -454,7 +503,6 @@ static const char *createAggregateSelfContact =
         "\n '',"
         "\n '',"
         "\n '',"
-        "\n 'aggregate',"
         "\n '',"
         "\n '',"
         "\n '',"
@@ -465,6 +513,7 @@ static const char *createSelfContactRelationship =
 static const char *createSelfContact =
         "\n INSERT INTO Contacts ("
         "\n contactId,"
+        "\n collectionId,"
         "\n displayLabel,"
         "\n firstName,"
         "\n lowerFirstName,"
@@ -474,13 +523,13 @@ static const char *createSelfContact =
         "\n prefix,"
         "\n suffix,"
         "\n customLabel,"
-        "\n syncTarget,"
         "\n created,"
         "\n modified,"
         "\n gender,"
         "\n isFavorite)"
         "\n VALUES ("
         "\n 2,"
+        "\n 1,"
         "\n '',"
         "\n '',"
         "\n '',"
@@ -490,14 +539,10 @@ static const char *createSelfContact =
         "\n '',"
         "\n '',"
         "\n '',"
-        "\n 'local',"
         "\n '',"
         "\n '',"
         "\n '',"
         "\n 0);";
-
-static const char *createContactsSyncTargetIndex =
-        "\n CREATE INDEX ContactsSyncTargetIndex ON Contacts(syncTarget);";
 
 static const char *createContactsFirstNameIndex =
         "\n CREATE INDEX ContactsFirstNameIndex ON Contacts(lowerFirstName);";
@@ -597,7 +642,11 @@ static const char *createAnalyzeData3 =
 
 static const char *createStatements[] =
 {
+    createCollectionsTable,
+    createLocalCollection,
+    createAggregateCollection,
     createContactsTable,
+    createCollectionIndex,
     createAddressesTable,
     createAnniversariesTable,
     createAvatarsTable,
@@ -646,9 +695,9 @@ static const char *createStatements[] =
     createRelationshipsTable,
     createDeletedContactsTable,
     createOOBTable,
+    createCollectionRemoveTrigger,
     createDbSettingsTable,
     createRemoveTrigger,
-    createContactsSyncTargetIndex,
     createContactsFirstNameIndex,
     createContactsLastNameIndex,
     createRelationshipsFirstIdIndex,
@@ -1304,6 +1353,77 @@ static const char *upgradeVersion17[] = {
     0 // NULL-terminated
 };
 
+static const char *upgradeVersion18[] = {
+    createCollectionsTable,
+    createCollectionRemoveTrigger,
+    createLocalCollection,
+    createAggregateCollection,
+    // Populate the collections table
+    "INSERT INTO Collections("
+            "syncTarget) " // TODO: decide whether keeping the name field empty is fine
+        "SELECT DISTINCT syncTarget FROM Contacts "
+        "WHERE syncTarget NOT IN ('local', 'aggregate')",
+    // Recreate the remove trigger
+    "DROP TRIGGER RemoveContactDetails",
+    createRemoveTrigger,
+    // Re-create and populate the Contacts table from the old version
+    "ALTER TABLE Contacts RENAME TO OldContacts",
+    createContactsTable,
+    "INSERT INTO Contacts("
+            "contactId,"
+            "collectionId,"
+            "displayLabel,"
+            "firstName,"
+            "lowerFirstName,"
+            "lastName,"
+            "lowerLastName,"
+            "middleName,"
+            "prefix,"
+            "suffix,"
+            "customLabel,"
+            "created,"
+            "modified,"
+            "gender,"
+            "isFavorite,"
+            "hasPhoneNumber,"
+            "hasEmailAddress,"
+            "hasOnlineAccount,"
+            "isOnline,"
+            "isDeactivated,"
+            "isIncidental,"
+            "type) "
+        "SELECT "
+            "OC.contactId,"
+            "CL.collectionId,"
+            "OC.displayLabel,"
+            "OC.firstName,"
+            "OC.lowerFirstName,"
+            "OC.lastName,"
+            "OC.lowerLastName,"
+            "OC.middleName,"
+            "OC.prefix,"
+            "OC.suffix,"
+            "OC.customLabel,"
+            "OC.created,"
+            "OC.modified,"
+            "OC.gender,"
+            "OC.isFavorite,"
+            "OC.hasPhoneNumber,"
+            "OC.hasEmailAddress,"
+            "OC.hasOnlineAccount,"
+            "OC.isOnline,"
+            "OC.isDeactivated,"
+            "OC.isIncidental,"
+            "OC.type "
+        "FROM OldContacts AS OC "
+        "JOIN Collections AS CL ON OC.syncTarget = CL.syncTarget",
+    "DROP INDEX IF EXISTS ContactsSyncTargetIndex",
+    "DROP TABLE OldContacts",
+    createCollectionIndex,
+    "PRAGMA user_version=19",
+    0 // NULL-terminated
+};
+
 typedef bool (*UpgradeFunction)(QSqlDatabase &database);
 
 struct UpdatePhoneNormalization
@@ -1762,9 +1882,10 @@ static UpgradeOperation upgradeVersions[] = {
     { 0,                        upgradeVersion15 },
     { updateStorageTypes,       upgradeVersion16 },
     { addDisplayLabelGroup,     upgradeVersion17 },
+    { 0,                        upgradeVersion18 },
 };
 
-static const int currentSchemaVersion = 18;
+static const int currentSchemaVersion = 19;
 
 static bool execute(QSqlDatabase &database, const QString &statement)
 {
