@@ -682,6 +682,7 @@ static const char *createStatements[] =
     createRelationshipsTable,
     createDeletedContactsTable,
     createOOBTable,
+    createCollectionRemoveTrigger,
     createRemoveTrigger,
     createContactsFirstNameIndex,
     createContactsLastNameIndex,
@@ -1335,6 +1336,7 @@ static const char *upgradeVersion16[] = {
 static const char *upgradeVersion17[] = {
     createCollectionsTable,
     createCollectionIndex,
+    createCollectionRemoveTrigger,
     createLocalCollection,
     createAggregateCollection,
     // Populate the collections table

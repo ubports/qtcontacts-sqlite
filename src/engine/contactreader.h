@@ -47,7 +47,7 @@ QTCONTACTS_USE_NAMESPACE
 class ContactReader
 {
 public:
-    ContactReader(ContactsDatabase &database);
+    ContactReader(ContactsDatabase &database, const QString &managerUri);
     virtual ~ContactReader();
 
     QContactManager::Error readCollections();
@@ -106,6 +106,7 @@ protected:
 
 private:
     ContactsDatabase &m_database;
+    QString m_managerUri;
 };
 
 #endif

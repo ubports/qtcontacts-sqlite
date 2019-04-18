@@ -810,8 +810,9 @@ private:
 class JobContactReader : public ContactReader
 {
 public:
-    JobContactReader(ContactsDatabase &database, JobThread *thread)
-        : ContactReader(database)
+    JobContactReader(ContactsDatabase &database, const QString &managerUri,
+                     JobThread *thread)
+        : ContactReader(database, managerUri)
         , m_thread(thread)
     {
     }
@@ -866,7 +867,7 @@ void JobThread::run()
         }
     } else {
         ContactNotifier notifier(m_nonprivileged);
-        JobContactReader reader(m_database, this);
+        JobContactReader reader(m_database, m_engine->managerUri(), this);
         Job::WriterProxy writer(*m_engine, m_database, notifier, reader);
 
         while (m_running) {
@@ -1526,7 +1527,8 @@ ContactsDatabase &ContactsEngine::database()
 ContactReader *ContactsEngine::reader() const
 {
     if (!m_synchronousReader) {
-        m_synchronousReader.reset(new ContactReader(const_cast<ContactsEngine *>(this)->database()));
+        m_synchronousReader.reset(new ContactReader(const_cast<ContactsEngine *>(this)->database(),
+                                                    managerUri()));
     }
     return m_synchronousReader.data();
 }

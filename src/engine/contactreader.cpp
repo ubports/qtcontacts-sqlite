@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (C) 2019 Ubports Foundation <info@ubports.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -75,6 +76,7 @@
 
 #include <QContactManagerEngine>
 
+#include <QByteArray>
 #include <QSqlError>
 #include <QVector>
 
@@ -1529,8 +1531,9 @@ static void debugFilterExpansion(const QString &description, const QString &quer
     }
 }
 
-ContactReader::ContactReader(ContactsDatabase &database)
-    : m_database(database)
+ContactReader::ContactReader(ContactsDatabase &database,
+                             const QString &managerUri)
+    : m_database(database), m_managerUri(managerUri)
 {
 }
 
@@ -1836,72 +1839,56 @@ QString expandWhere(const QString &where, const QContactFilter &filter, const bo
 
 QContactManager::Error ContactReader::readCollections()
 {
+    qDebug() << Q_FUNC_INFO;
     QMutexLocker locker(m_database.accessMutex());
 
-    QString join;
-    bool transientModifiedRequired = false;
-    bool globalPresenceRequired = false;
-    const QString orderBy = buildOrderBy(order, &join, &transientModifiedRequired, &globalPresenceRequired, m_database.localized());
-
-    bool failed = false;
-    QVariantList bindings;
-    QString where = buildWhere(filter, m_database, tableName, &bindings, &failed, &transientModifiedRequired, &globalPresenceRequired);
-    if (failed) {
-        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to create WHERE expression: invalid filter specification"));
-        return QContactManager::UnspecifiedError;
-    }
-
-    where = expandWhere(where, filter, m_database.aggregating());
-
-    if (transientModifiedRequired || globalPresenceRequired) {
-        // Provide the temporary transient state information to filter/sort on
-        if (!m_database.populateTemporaryTransientState(transientModifiedRequired, globalPresenceRequired)) {
-            return QContactManager::UnspecifiedError;
-        }
-
-        if (transientModifiedRequired) {
-            join.append(QStringLiteral(" LEFT JOIN temp.Timestamps ON Contacts.contactId = temp.Timestamps.contactId"));
-        }
-        if (globalPresenceRequired) {
-            join.append(QStringLiteral(" LEFT JOIN temp.GlobalPresenceStates ON Contacts.contactId = temp.GlobalPresenceStates.contactId"));
-        }
-    }
-
-    QString queryString = QString(QLatin1String(
-                "\n SELECT DISTINCT Contacts.contactId"
-                "\n FROM Contacts %1"
-                "\n %2")).arg(join).arg(where);
-    if (!orderBy.isEmpty()) {
-        queryString.append(QString::fromLatin1(" ORDER BY ") + orderBy);
-    }
+    const QString queryString(QLatin1String(
+        "SELECT "
+            "collectionId,"
+            "isDefault,"
+            "isReadOnly,"
+            "name,"
+            "description,"
+            "color,"
+            "secondaryColor,"
+            "image,"
+            "syncTarget,"
+            "extended "
+        "FROM Collections "
+        "ORDER BY collectionId ASC"));
 
     QSqlQuery query(m_database);
     query.setForwardOnly(true);
     if (!query.prepare(queryString)) {
-        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to prepare contacts ids:\n%1\nQuery:\n%2")
+        QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to prepare collection:\n%1\nQuery:\n%2")
                 .arg(query.lastError().text())
                 .arg(queryString));
         return QContactManager::UnspecifiedError;
     }
-
-    for (int i = 0; i < bindings.count(); ++i)
-        query.bindValue(i, bindings.at(i));
 
     if (!ContactsDatabase::execute(query)) {
         QTCONTACTS_SQLITE_WARNING(QString::fromLatin1("Failed to query contacts ids\n%1\nQuery:\n%2")
                 .arg(query.lastError().text())
                 .arg(queryString));
         return QContactManager::UnspecifiedError;
-    } else {
-        debugFilterExpansion("Contact IDs selection:", queryString, bindings);
     }
 
-    do {
-        for (int i = 0; i < ReportBatchSize && query.next(); ++i) {
-            contactIds->append(ContactId::apiId(query.value(0).toUInt()));
-        }
-        contactIdsAvailable(*contactIds);
-    } while (query.isValid());
+    QList<QContactCollection> collections;
+
+    while (query.next()) {
+        quint32 dbId = query.value(0).toUInt();
+        qDebug() << "got collection" << dbId;
+
+        QContactCollectionId id(m_managerUri, QByteArray::number(dbId));
+        QContactCollection collection;
+        collection.setId(id);
+        // FIXME TODO read rest
+        collections.append(collection);
+    }
+
+    if (!collections.isEmpty()) {
+        collectionsAvailable(collections);
+    }
 
     return QContactManager::NoError;
 }
