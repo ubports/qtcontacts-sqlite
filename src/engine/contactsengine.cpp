@@ -231,6 +231,7 @@ public:
 
     void execute(ContactReader *reader, WriterProxy &)
     {
+        qDebug() << Q_FUNC_INFO;
         m_error = reader->readCollections();
     }
 
@@ -1204,6 +1205,7 @@ bool ContactsEngine::startRequest(QContactAbstractRequest* request)
         break;
 #ifdef NEW_QTPIM
     case QContactAbstractRequest::CollectionFetchRequest:
+        qDebug() << Q_FUNC_INFO << "creating collection job";
         job = new ContactCollectionFetchJob(qobject_cast<QContactCollectionFetchRequest *>(request));
         break;
 #endif

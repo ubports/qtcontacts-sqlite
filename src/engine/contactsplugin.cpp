@@ -44,10 +44,15 @@ class ContactsFactory : public QContactManagerEngineFactory
 
 public:
     ContactsFactory();
+    virtual ~ContactsFactory() {}
 
     QContactManagerEngine *engine(
-            const QMap<QString, QString> &parameters, QContactManager::Error* error);
-    QString managerName() const;
+            const QMap<QString, QString> &parameters, QContactManager::Error* error) override;
+    QString managerName() const override;
+    QStringList keys() const override {
+        qWarning() << Q_FUNC_INFO;
+        return QStringList { "uno"};
+    }
 #ifndef NEW_QTPIM
     QContactEngineId *createContactEngineId(
             const QMap<QString, QString> &parameters, const QString &engineIdString) const;
@@ -57,6 +62,7 @@ public:
 
 ContactsFactory::ContactsFactory()
 {
+    qWarning() << "Creating our factory";
 }
 
 QContactManagerEngine *ContactsFactory::engine(
@@ -78,6 +84,7 @@ QContactManagerEngine *ContactsFactory::engine(
 
 QString ContactsFactory::managerName() const
 {
+    qWarning() << Q_FUNC_INFO;
     return QString::fromLatin1("org.nemomobile.contacts.sqlite");
 }
 
@@ -85,6 +92,7 @@ QString ContactsFactory::managerName() const
 QContactEngineId *ContactsFactory::createContactEngineId(
         const QMap<QString, QString> &parameters, const QString &engineIdString) const
 {
+    qWarning() << Q_FUNC_INFO;
     Q_UNUSED(parameters)
     return new ContactId(engineIdString);
 }
