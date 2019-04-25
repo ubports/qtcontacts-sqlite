@@ -1,0 +1,8 @@
+*.log
+*.substvars
+debhelper-build-stamp
+files
+qtcontacts-sqlite-qt5-extension-dev/
+qtcontacts-sqlite-qt5-extension/
+tmp/
+
