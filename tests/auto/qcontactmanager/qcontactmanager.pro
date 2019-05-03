@@ -2,6 +2,9 @@ TARGET = tst_qcontactmanager
 
 include(../../common.pri)
 
+QT += \
+    gui # for QColor
+
 INCLUDEPATH += \
     ../../../src/engine/
 

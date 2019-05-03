@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <QColor>
+
 #define QT_STATICPLUGIN
 
 #if defined(USE_VERSIT_PLZ)
@@ -176,6 +178,9 @@ private slots:
 
     void doDump();
     void doDump_data() {addManagers();}
+
+    void collections();
+    void collectionRemoval();
 
 #ifdef MUTABLE_SCHEMA_SUPPORTED
     void doDumpSchema();
@@ -531,6 +536,77 @@ void tst_QContactManager::dumpContacts(QContactManager *cm)
         QContact c = cm->contact(id);
         dumpContact(c, cm);
     }
+}
+
+void tst_QContactManager::collections()
+{
+    QScopedPointer<QContactManager> cm(newContactManager());
+
+    QList<QContactCollection> previousCollections = cm->collections();
+
+    QContactCollection collection;
+    collection.setMetaData(QContactCollection::KeyName, "Friends");
+    collection.setMetaData(QContactCollection::KeyColor, QColor("red"));
+    collection.setExtendedMetaData(QStringLiteral("syncTarget"),
+                                   QStringLiteral("mycloud"));
+    QVERIFY(cm->saveCollection(&collection));
+    QVERIFY(!collection.id().isNull());
+
+    QList<QContactCollection> currentCollections = cm->collections();
+    QCOMPARE(currentCollections.count(), previousCollections.count() + 1);
+
+    QContactCollection readCollection = cm->collection(collection.id());
+    QCOMPARE(readCollection.id(), collection.id());
+
+    QCOMPARE(readCollection.metaData(QContactCollection::KeyName).toString(),
+             QString("Friends"));
+    QCOMPARE(readCollection.metaData(QContactCollection::KeyColor).value<QColor>(),
+             QColor(Qt::red));
+    QCOMPARE(readCollection.extendedMetaData(QStringLiteral("syncTarget")).toString(),
+             QStringLiteral("mycloud"));
+}
+
+void tst_QContactManager::collectionRemoval()
+{
+    QScopedPointer<QContactManager> cm(newContactManager());
+
+    QContactCollection collection;
+    collection.setMetaData(QContactCollection::KeyName, "Foes");
+    QVERIFY(cm->saveCollection(&collection));
+    QVERIFY(!collection.id().isNull());
+
+    QStringList contactNames { "Tom", "Dick", "Harry" };
+    QList<QContactId> contactIds;
+
+    for (const QString &name: contactNames) {
+        QContact a;
+        a.setCollectionId(collection.id());
+        QContactName n;
+        n.setFirstName(name);
+        a.saveDetail(&n);
+        QVERIFY(cm->saveContact(&a));
+        contactIds.append(a.id());
+    }
+
+    /* Create also a contact not in the collection, to test filtering */
+    QContact intruder;
+    QContactName n;
+    n.setFirstName("Intruder");
+    intruder.saveDetail(&n);
+    QVERIFY(cm->saveContact(&intruder));
+
+    QContactCollectionFilter filter;
+    filter.setCollectionId(collection.id());
+    QList<QContactId> readContactIds = cm->contactIds(filter);
+    QCOMPARE(readContactIds.toSet(), contactIds.toSet());
+
+    /* Remove the collection, and ensure that contacts are removed as well */
+    QSignalSpy removedSpy(cm.data(), contactsRemovedSignal);
+
+    QVERIFY(cm->removeCollection(collection.id()));
+    QTRY_COMPARE(removedSpy.count(), 1);
+    QCOMPARE(removedSpy.at(0).at(0).value<QList<QContactId>>().toSet(),
+             contactIds.toSet());
 }
 
 void tst_QContactManager::uriParsing_data()
