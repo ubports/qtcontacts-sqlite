@@ -49,6 +49,9 @@ private slots:
     void fromDateTimeString_tz_speed();
     void fromDateTimeString_isodate_speed();
 
+    void testUpgrade_data();
+    void testUpgrade();
+
 private:
     char *old_TZ;
 };
@@ -171,6 +174,62 @@ void tst_Database::fromDateTimeString_isodate_speed()
         QDateTime rv = QDateTime::fromString(datetime, Qt::ISODate);
         rv.setTimeSpec(Qt::UTC);
     }
+}
+
+void tst_Database::testUpgrade_data()
+{
+    QTest::addColumn<QString>("fileNameOld");
+    QTest::addColumn<QString>("fileNameNew");
+
+    QTest::newRow("from 18 to 19")
+        << "contacts_18.dump"
+        << "contacts_19_expected.dump";
+}
+
+void tst_Database::testUpgrade()
+{
+    QFETCH(QString, fileNameOld);
+    QFETCH(QString, fileNameNew);
+
+    QDir dataDir(TEST_DATA_DIR);
+    QDir dbDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) +
+               "/system/" QTCONTACTS_SQLITE_PRIVILEGED_DIR
+               "/" QTCONTACTS_SQLITE_DATABASE_DIR);
+    dbDir.removeRecursively();
+    dbDir.mkpath(".");
+
+    QString inputFile = dataDir.absoluteFilePath(fileNameOld);
+    QString dbFile = dbDir.absoluteFilePath(QTCONTACTS_SQLITE_DATABASE_NAME);
+
+    /* Load the SQL dump into the DB */
+    QProcess sqlite3load;
+    sqlite3load.setStandardInputFile(inputFile);
+    sqlite3load.start("sqlite3", QStringList { dbFile });
+    QVERIFY(sqlite3load.waitForStarted());
+    QVERIFY(sqlite3load.waitForFinished());
+
+    /* Open the DB and close it; this should perform the upgrade */
+    {
+        ContactsDatabase db(nullptr);
+        QVERIFY(db.open(QTCONTACTS_SQLITE_DATABASE_NAME, false, false));
+    }
+
+    /* Dump the DB */
+    QProcess sqlite3dump;
+    sqlite3dump.setStandardOutputFile("contacts.dump");
+    sqlite3dump.start("sqlite3", QStringList { dbFile, ".dump" });
+    QVERIFY(sqlite3dump.waitForStarted());
+    QVERIFY(sqlite3dump.waitForFinished());
+
+    /* Compare the dumped DB with the expected one */
+    QString expectedFile = dataDir.absoluteFilePath(fileNameNew);
+    QProcess diff;
+    diff.start("diff", QStringList { "contacts.dump", expectedFile });
+    QVERIFY(diff.waitForStarted());
+    QVERIFY(diff.waitForFinished());
+
+    QCOMPARE(diff.readAllStandardOutput(), QByteArray());
+    QCOMPARE(diff.readAllStandardError(), QByteArray());
 }
 
 QTEST_GUILESS_MAIN(tst_Database)
