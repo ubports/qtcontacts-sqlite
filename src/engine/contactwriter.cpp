@@ -117,11 +117,6 @@ namespace {
 
         return entropy / 8;
     }
-
-    double entropy(const QByteArray &data)
-    {
-        return entropy(data.constBegin(), data.constEnd(), data.size());
-    }
 }
 
 static const QString aggregateSyncTarget(QString::fromLatin1("aggregate"));
@@ -139,7 +134,7 @@ static const QString matchEmailAddressesTable(QString::fromLatin1("matchEmailAdd
 static const QString matchPhoneNumbersTable(QString::fromLatin1("matchPhoneNumbers"));
 static const QString matchOnlineAccountsTable(QString::fromLatin1("matchOnlineAccounts"));
 
-ContactWriter::ContactWriter(const ContactsEngine &engine, ContactsDatabase &database, ContactNotifier *notifier, ContactReader *reader)
+ContactWriter::ContactWriter(ContactsEngine &engine, ContactsDatabase &database, ContactNotifier *notifier, ContactReader *reader)
     : m_engine(engine)
     , m_database(database)
     , m_notifier(notifier)
@@ -1148,39 +1143,12 @@ static bool detailValuesEqual(const QContactDetail &lhs, const QContactDetail &r
     return true;
 }
 
-static bool detailValuesSuperset(const QContactDetail &lhs, const QContactDetail &rhs)
-{
-    // True if all values in rhs are present in lhs
-    const DetailMap lhsValues(detailValues(lhs, false));
-    const DetailMap rhsValues(detailValues(rhs, false));
-
-    if (lhsValues.count() < rhsValues.count()) {
-        return false;
-    }
-
-    foreach (const DetailMap::key_type &key, rhsValues.keys()) {
-        if (!variantEqual(lhsValues[key], rhsValues[key])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 static bool detailsEquivalent(const QContactDetail &lhs, const QContactDetail &rhs)
 {
     // Same as operator== except ignores differences in accessConstraints values
     if (detailType(lhs) != detailType(rhs))
         return false;
     return detailValuesEqual(lhs, rhs);
-}
-
-static bool detailsSuperset(const QContactDetail &lhs, const QContactDetail &rhs)
-{
-    // True is lhs is a superset of rhs
-    if (detailType(lhs) != detailType(rhs))
-        return false;
-    return detailValuesSuperset(lhs, rhs);
 }
 
 QContactManager::Error ContactWriter::fetchSyncContacts(const QString &syncTarget, const QDateTime &lastSync, const QList<QContactId> &exportedIds,
@@ -1691,7 +1659,7 @@ ContactsDatabase::Query bindDetail(ContactsDatabase &db, quint32 contactId, quin
     query.addBindValue(contactId);
     query.addBindValue(detailValue(detail, T::FieldOriginalDate));
     query.addBindValue(detailValue(detail, T::FieldCalendarId));
-    query.addBindValue(QString::number(detail.subType()));
+    query.addBindValue(detail.hasValue(T::FieldSubType) ? QString::number(detail.subType()) : QString());
     query.addBindValue(detail.value<QString>(T::FieldEvent).trimmed());
     return query;
 }
@@ -2204,7 +2172,7 @@ ContactsDatabase::Query bindDetail(ContactsDatabase &db, quint32 contactId, quin
     query.addBindValue(detailId);
     query.addBindValue(contactId);
     query.addBindValue(detail.value<QString>(T::FieldUrl).trimmed());
-    query.addBindValue(QString::number(detail.subType()));
+    query.addBindValue(detail.hasValue(T::FieldSubType) ? QString::number(detail.subType()) : QString());
     return query;
 }
 
@@ -5541,6 +5509,8 @@ ContactsDatabase::Query ContactWriter::bindContactDetails(const QContact &contac
     const QString insertContact(QStringLiteral(
         " INSERT INTO Contacts ("
         "  displayLabel,"
+        "  displayLabelGroup,"
+        "  displayLabelGroupSortOrder,"
         "  firstName,"
         "  lowerFirstName,"
         "  lastName,"
@@ -5562,6 +5532,8 @@ ContactsDatabase::Query ContactWriter::bindContactDetails(const QContact &contac
         "  isIncidental)"
         " VALUES ("
         "  :displayLabel,"
+        "  :displayLabelGroup,"
+        "  :displayLabelGroupSortOrder,"
         "  :firstName,"
         "  :lowerFirstName,"
         "  :lastName,"
@@ -5585,6 +5557,8 @@ ContactsDatabase::Query ContactWriter::bindContactDetails(const QContact &contac
     const QString updateContact(QStringLiteral(
         " UPDATE Contacts SET"
         "  displayLabel = :displayLabel,"
+        "  displayLabelGroup = :displayLabelGroup,"
+        "  displayLabelGroupSortOrder = :displayLabelGroupSortOrder,"
         "  firstName = :firstName,"
         "  lowerFirstName = :lowerFirstName,"
         "  lastName = :lastName,"
@@ -5610,34 +5584,39 @@ ContactsDatabase::Query ContactWriter::bindContactDetails(const QContact &contac
 
     ContactsDatabase::Query query(m_database.prepare(update ? updateContact : insertContact));
 
-    QContactDisplayLabel label = contact.detail<QContactDisplayLabel>();
-    query.bindValue(0, label.label().trimmed());
-
     const QContactName name = contact.detail<QContactName>();
     const QString firstName(name.value<QString>(QContactName::FieldFirstName).trimmed());
     const QString lastName(name.value<QString>(QContactName::FieldLastName).trimmed());
 
-    query.bindValue(1, firstName);
-    query.bindValue(2, firstName.toLower());
-    query.bindValue(3, lastName);
-    query.bindValue(4, lastName.toLower());
-    query.bindValue(5, name.value<QString>(QContactName::FieldMiddleName).trimmed());
-    query.bindValue(6, name.value<QString>(QContactName::FieldPrefix).trimmed());
-    query.bindValue(7, name.value<QString>(QContactName::FieldSuffix).trimmed());
-    query.bindValue(8, name.value<QString>(QContactName__FieldCustomLabel).trimmed());
+    QContactDisplayLabel label = contact.detail<QContactDisplayLabel>();
+    const QString displayLabel = label.label().trimmed();
+    query.bindValue(0, displayLabel);
+    const QString displayLabelGroup = m_database.determineDisplayLabelGroup(contact);
+    query.bindValue(1, displayLabelGroup);
+    const int displayLabelGroupSortOrder = m_database.displayLabelGroupSortValue(displayLabelGroup);
+    query.bindValue(2, displayLabelGroupSortOrder);
+
+    query.bindValue(3, firstName);
+    query.bindValue(4, firstName.toLower());
+    query.bindValue(5, lastName);
+    query.bindValue(6, lastName.toLower());
+    query.bindValue(7, name.value<QString>(QContactName::FieldMiddleName).trimmed());
+    query.bindValue(8, name.value<QString>(QContactName::FieldPrefix).trimmed());
+    query.bindValue(9, name.value<QString>(QContactName::FieldSuffix).trimmed());
+    query.bindValue(10, name.value<QString>(QContactName__FieldCustomLabel).trimmed());
 
     const QString syncTarget(contact.detail<QContactSyncTarget>().syncTarget());
-    query.bindValue(9, syncTarget);
+    query.bindValue(11, syncTarget);
 
     const QContactTimestamp timestamp = contact.detail<QContactTimestamp>();
-    query.bindValue(10, ContactsDatabase::dateTimeString(timestamp.value<QDateTime>(QContactTimestamp::FieldCreationTimestamp).toUTC()));
-    query.bindValue(11, ContactsDatabase::dateTimeString(timestamp.value<QDateTime>(QContactTimestamp::FieldModificationTimestamp).toUTC()));
+    query.bindValue(12, ContactsDatabase::dateTimeString(timestamp.value<QDateTime>(QContactTimestamp::FieldCreationTimestamp).toUTC()));
+    query.bindValue(13, ContactsDatabase::dateTimeString(timestamp.value<QDateTime>(QContactTimestamp::FieldModificationTimestamp).toUTC()));
 
     const QContactGender gender = contact.detail<QContactGender>();
-    query.bindValue(12, QString::number(static_cast<int>(gender.gender())));
+    query.bindValue(14, QString::number(static_cast<int>(gender.gender())));
 
     const QContactFavorite favorite = contact.detail<QContactFavorite>();
-    query.bindValue(13, favorite.isFavorite());
+    query.bindValue(15, favorite.isFavorite());
 
     // Does this contact contain the information needed to update hasPhoneNumber?
     bool hasPhoneNumberKnown = definitionMask.isEmpty() || detailListContains<QContactPhoneNumber>(definitionMask);
@@ -5672,26 +5651,26 @@ ContactsDatabase::Query ContactWriter::bindContactDetails(const QContact &contac
     }
 
     if (update) {
-        query.bindValue(14, hasPhoneNumberKnown);
-        query.bindValue(15, hasPhoneNumber);
-        query.bindValue(16, hasEmailAddressKnown);
-        query.bindValue(17, hasEmailAddress);
-        query.bindValue(18, hasOnlineAccountKnown);
-        query.bindValue(19, hasOnlineAccount);
-        query.bindValue(20, isOnlineKnown);
-        query.bindValue(21, isOnline);
-        query.bindValue(22, isDeactivatedKnown);
-        query.bindValue(23, isDeactivated);
-        query.bindValue(24, contactId);
+        query.bindValue(16, hasPhoneNumberKnown);
+        query.bindValue(17, hasPhoneNumber);
+        query.bindValue(18, hasEmailAddressKnown);
+        query.bindValue(19, hasEmailAddress);
+        query.bindValue(20, hasOnlineAccountKnown);
+        query.bindValue(21, hasOnlineAccount);
+        query.bindValue(22, isOnlineKnown);
+        query.bindValue(23, isOnline);
+        query.bindValue(24, isDeactivatedKnown);
+        query.bindValue(25, isDeactivated);
+        query.bindValue(26, contactId);
     } else {
-        query.bindValue(14, hasPhoneNumber);
-        query.bindValue(15, hasEmailAddress);
-        query.bindValue(16, hasOnlineAccount);
-        query.bindValue(17, isOnline);
-        query.bindValue(18, isDeactivated);
+        query.bindValue(16, hasPhoneNumber);
+        query.bindValue(17, hasEmailAddress);
+        query.bindValue(18, hasOnlineAccount);
+        query.bindValue(19, isOnline);
+        query.bindValue(20, isDeactivated);
 
         // Incidental state only applies to creation
-        query.bindValue(19, !contact.details<QContactIncidental>().isEmpty());
+        query.bindValue(21, !contact.details<QContactIncidental>().isEmpty());
     }
 
     return query;

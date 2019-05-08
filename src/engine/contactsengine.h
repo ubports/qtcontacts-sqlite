@@ -36,6 +36,10 @@
 
 #include <QScopedPointer>
 #include <QSqlDatabase>
+#include <QObject>
+#include <QList>
+#include <QMap>
+#include <QString>
 
 #include "contactsdatabase.h"
 #include "contactnotifier.h"
@@ -132,7 +136,7 @@ public:
     bool isRelationshipTypeSupported(const QString &relationshipType, QContactType::TypeValues contactType) const override;
     QList<QContactType::TypeValues> supportedContactTypes() const override;
 
-    void regenerateDisplayLabel(QContact &contact) const;
+    void regenerateDisplayLabel(QContact &contact);
 
     bool fetchSyncContacts(const QString &syncTarget, const QDateTime &lastSync, const QList<QContactId> &exportedIds,
                            QList<QContact> *syncContacts, QList<QContact> *addedContacts, QList<QContactId> *deletedContactIds,
@@ -159,11 +163,13 @@ public:
     bool removeOOB(const QString &scope, const QStringList &keys);
     bool removeOOB(const QString &scope);
 
-    static bool setContactDisplayLabel(QContact *contact, const QString &label);
+    static bool setContactDisplayLabel(QContact *contact, const QString &label, const QString &group);
 
     static QString normalizedPhoneNumber(const QString &input);
 
     QString synthesizedDisplayLabel(const QContact &contact, QContactManager::Error *error) const;
+
+    QStringList displayLabelGroups() override;
 
 private slots:
     void _q_contactsChanged(const QVector<quint32> &contactIds);
@@ -174,6 +180,7 @@ private slots:
     void _q_selfContactIdChanged(quint32,quint32);
     void _q_relationshipsAdded(const QVector<quint32> &contactIds);
     void _q_relationshipsRemoved(const QVector<quint32> &contactIds);
+    void _q_displayLabelGroupsChanged();
 
 private:
     QString databaseUuid();

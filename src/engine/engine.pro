@@ -3,11 +3,22 @@ include(../../config.pri)
 TEMPLATE = lib
 TARGET = qtcontacts_sqlite
 
-QT += sql dbus
+QT = core sql dbus
+
+# Error on undefined symbols
+QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF
 
 CONFIG += plugin hide_symbols
 PLUGIN_TYPE=contacts
 DESTDIR=$${PLUGIN_TYPE}
+
+CONFIG += link_pkgconfig
+packagesExist(mlite5) {
+    PKGCONFIG += mlite5
+    DEFINES += HAS_MLITE
+} else {
+    warning("mlite not available. Display label groups will be generated from last name.")
+}
 
 # we hardcode this for Qt4 as there's no GenericDataLocation offered by QDesktopServices
 DEFINES += 'QTCONTACTS_SQLITE_PRIVILEGED_DIR=\'\"privileged\"\''
@@ -22,6 +33,7 @@ INCLUDEPATH += \
         ../extensions
 
 HEADERS += \
+        defaultdlggenerator.h \
         memorytable_p.h \
         semaphore_p.h \
         trace_p.h \
@@ -36,6 +48,7 @@ HEADERS += \
         ../extensions/contactmanagerengine.h
 
 SOURCES += \
+        defaultdlggenerator.cpp \
         memorytable.cpp \
         semaphore_p.cpp \
         conversion.cpp \
