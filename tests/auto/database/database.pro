@@ -10,6 +10,9 @@ DEFINES += 'QTCONTACTS_SQLITE_DATABASE_DIR=\'\"Contacts/qtcontacts-sqlite\"\''
 DEFINES += 'QTCONTACTS_SQLITE_DATABASE_NAME=\'\"contacts-test.db\"\''
 # we build a path like: /home/nemo/.local/share/system/Contacts/qtcontacts-sqlite-test/contacts-test.db
 
+TEST_DATA_DIR = $$PWD/data
+DEFINES += 'TEST_DATA_DIR=\'\"$$TEST_DATA_DIR\"\''
+
 INCLUDEPATH += \
     ../../../src/engine/
 
