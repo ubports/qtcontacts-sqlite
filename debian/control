@@ -8,6 +8,8 @@ Build-Depends: debhelper (>= 9),
                qt5-default,
                qtbase5-dev,
                qtpim5-dev,
+               dbus <!nocheck>,
+               sqlite3 <!nocheck>,
 Standards-Version: 3.9.5
 Homepage: https://github.com/ubports/qtcontacts-sqlite
 
