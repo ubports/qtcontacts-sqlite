@@ -9,6 +9,10 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 	    CONFIG+=new_qtpim
 
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	make -j1 check
+endif
 
 override_dh_install:
 	# remove the tests
