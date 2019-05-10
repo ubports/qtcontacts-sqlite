@@ -13,6 +13,7 @@ override_dh_auto_configure:
 override_dh_install:
 	# remove the tests
 	rm -rf debian/tmp/opt
+	rm -f debian/tmp/usr/lib/qtcontacts-sqlite-qt5/libtestdlgg.so
 	dh_install --fail-missing
 
 %:
