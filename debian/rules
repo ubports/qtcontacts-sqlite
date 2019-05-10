@@ -9,7 +9,8 @@ export QT_SELECT := qt5
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
-	make -j1 check
+	mkdir -p test-home/.local/share # Workaround for jenkins
+	HOME=$(shell pwd)/test-home make -j1 check
 endif
 
 override_dh_install:
