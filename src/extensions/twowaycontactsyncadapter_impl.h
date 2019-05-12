@@ -597,7 +597,19 @@ void TwoWayContactSyncAdapterPrivate::readCollection()
         }
     }
     if (Q_UNLIKELY(m_collectionId.isNull())) {
-        qWarning() << "Couldn't read collection from syncTarget" << m_syncTarget;
+        QTCONTACTS_SQLITE_TWCSA_DEBUG_LOG(
+            "Collection for syncTarget" << m_syncTarget <<
+            "not found; creating it");
+        QContactCollection collection;
+        collection.setMetaData(QContactCollection::KeyName, m_syncTarget);
+        collection.setExtendedMetaData(QStringLiteral("syncTarget"),
+                                       m_syncTarget);
+        bool ok = m_manager->saveCollection(&collection);
+        if (Q_UNLIKELY(!ok)) {
+            qWarning() << "Failed to create collection" << m_syncTarget;
+        } else {
+            m_collectionId = collection.id();
+        }
     }
 }
 
