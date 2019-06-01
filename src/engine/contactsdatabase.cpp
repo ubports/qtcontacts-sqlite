@@ -1924,6 +1924,7 @@ static bool executeDisplayLabelGroupLocalizationStatements(QSqlDatabase &databas
     }
 
     // for every single contact in our database, read the data required to generate the display label group data.
+    bool emitDisplayLabelGroupChange = false;
     QVariantList contactIds;
     QVariantList displayLabelGroups;
     QVariantList displayLabelGroupSortOrders;
@@ -1959,7 +1960,7 @@ static bool executeDisplayLabelGroupLocalizationStatements(QSqlDatabase &databas
             c.saveDetail(&n);
             c.saveDetail(&dl);
 
-            const QString dlg = cdb->determineDisplayLabelGroup(c);
+            const QString dlg = cdb->determineDisplayLabelGroup(c, &emitDisplayLabelGroupChange);
             displayLabelGroups.append(dlg);
             displayLabelGroupSortOrders.append(cdb->displayLabelGroupSortValue(dlg));
         }
@@ -2698,7 +2699,10 @@ static size_t writeAccessIndex = 2;
 static QVector<QtContactsSqliteExtensions::DisplayLabelGroupGenerator*> initializeDisplayLabelGroupGenerators()
 {
     QVector<QtContactsSqliteExtensions::DisplayLabelGroupGenerator*> generators;
-    const QString pluginsPath = QStringLiteral("/usr/lib/qtcontacts-sqlite-qt5/");
+    QByteArray pluginsPathEnv = qgetenv("QTCONTACTS_SQLITE_PLUGIN_PATH");
+    const QString pluginsPath = pluginsPathEnv.isEmpty() ?
+        QStringLiteral("/usr/lib/qtcontacts-sqlite-qt5/") :
+        QString::fromUtf8(pluginsPathEnv);
     QDir pluginDir(pluginsPath);
     const QStringList pluginNames = pluginDir.entryList();
     for (const QString &plugin : pluginNames) {
@@ -3456,13 +3460,15 @@ void ContactsDatabase::regenerateDisplayLabelGroups()
 
 QString ContactsDatabase::displayLabelGroupPreferredProperty() const
 {
-    QString retn(QStringLiteral("QContactName::FieldLastName"));
+    QString retn(QStringLiteral("QContactName::FieldFirstName"));
 #ifdef HAS_MLITE
     const QVariant groupPropertyConf = m_groupPropertyConf.value();
     if (groupPropertyConf.isValid()) {
         const QString gpcString = groupPropertyConf.toString();
         if (gpcString.compare(QStringLiteral("FirstName"), Qt::CaseInsensitive) == 0) {
             retn = QStringLiteral("QContactName::FieldFirstName");
+        } else if (gpcString.compare(QStringLiteral("LastName"), Qt::CaseInsensitive) == 0) {
+            retn = QStringLiteral("QContactName::FieldLastName");
         } else if (gpcString.compare(QStringLiteral("DisplayLabel"), Qt::CaseInsensitive) == 0) {
             retn = QStringLiteral("QContactDisplayLabel::FieldLabel");
         }
@@ -3471,7 +3477,7 @@ QString ContactsDatabase::displayLabelGroupPreferredProperty() const
     return retn;
 }
 
-QString ContactsDatabase::determineDisplayLabelGroup(const QContact &c)
+QString ContactsDatabase::determineDisplayLabelGroup(const QContact &c, bool *emitDisplayLabelGroupChange)
 {
     // Read system setting to determine whether display label group
     // should be generated from last name, first name, or display label.
@@ -3530,19 +3536,17 @@ QString ContactsDatabase::determineDisplayLabelGroup(const QContact &c)
         }
     }
 
-    if (!group.isEmpty() && !m_knownDisplayLabelGroupsSortValues.contains(group)) {
+    if (emitDisplayLabelGroupChange && !group.isEmpty() && !m_knownDisplayLabelGroupsSortValues.contains(group)) {
         // We are about to write a contact to the database which has a
         // display label group which previously was not known / observed.
         // Calculate the sort value for the display label group,
         // and add it to our map of displayLabelGroup->sortValue.
         // Note: this should be thread-safe since we only call this method within writes.
+        *emitDisplayLabelGroupChange = true;
         m_knownDisplayLabelGroupsSortValues.insert(
                 group, ::displayLabelGroupSortValue(
                     group,
                     m_knownDisplayLabelGroupsSortValues));
-
-        // and invoke engine->_q_displayLabelGroupsChanged() asynchronously.
-        QMetaObject::invokeMethod(m_engine, "_q_displayLabelGroupsChanged", Qt::QueuedConnection);
     }
 
     return group;
