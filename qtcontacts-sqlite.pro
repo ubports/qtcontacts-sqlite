@@ -5,3 +5,6 @@ SUBDIRS = \
 OTHER_FILES += rpm/qtcontacts-sqlite-qt5.spec
 
 tests.depends = src
+
+# UBports:
+SUBDIRS += migration
