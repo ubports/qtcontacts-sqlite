@@ -22,4 +22,4 @@ override_dh_install:
 	dh_install --fail-missing
 
 %:
-	dh $@ --parallel --fail-missing 
+	dh $@ --parallel --fail-missing --with=migrations

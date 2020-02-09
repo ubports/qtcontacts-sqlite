@@ -1,0 +1,14 @@
+#! /bin/sh
+
+set -e
+
+# Exit if we already migrated
+[ -f "$HOME/.local/share/evolution/addressbook/system/migrated_to_qtcontacts" ] && exit 0
+
+# Exit if there is not DB file
+[ -f "$HOME/.local/share/evolution/addressbook/system/contacts.db" ] || exit 0
+
+# Import; the "1" stands for "local contacts collection"
+/usr/bin/eds_importer "$HOME/.local/share/evolution/addressbook/system/contacts.db" "1"
+
+echo $? > "$HOME/.local/share/evolution/addressbook/system/migrated_to_qtcontacts"

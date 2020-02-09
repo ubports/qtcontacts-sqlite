@@ -3,6 +3,7 @@ Section: libs
 Priority: optional
 Maintainer: Alberto Mardegan <mardy@users.sourceforge.net>
 Build-Depends: debhelper (>= 9),
+               dh-migrations,
                pkg-config,
                libqt5sql5-sqlite,
                qt5-default,
