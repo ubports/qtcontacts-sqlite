@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Jolla Ltd. <mattthew.vogt@jollamobile.com>
+ * Copyright (c) 2019 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -29,24 +29,45 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
  */
 
-#ifndef QCONTACTINCIDENTAL_IMPL_H
-#define QCONTACTINCIDENTAL_IMPL_H
+#ifndef QCONTACTDETAILFETCHREQUEST_P_H
+#define QCONTACTDETAILFETCHREQUEST_P_H
 
-#include "qcontactincidental.h"
-#include "qtcontacts-extensions.h"
+#include "./qcontactdetailfetchrequest.h"
 
-QTCONTACTS_USE_NAMESPACE
+#include <QPointer>
 
-void QContactIncidental::setInitialAggregateId(const QContactId &id)
+QT_BEGIN_NAMESPACE_CONTACTS
+
+class QContactDetailFetchRequestPrivate
 {
-    setValue(FieldInitialAggregateId, id.toString());
-}
+public:
+    static QContactDetailFetchRequestPrivate *get(QContactDetailFetchRequest *request) { return request->d_func(); }
 
-QContactId QContactIncidental::initialAggregateId() const
-{
-    return QContactId::fromString(value<QString>(FieldInitialAggregateId));
-}
+    QContactDetailFetchRequestPrivate(
+            QContactDetailFetchRequest *q,
+            void (QContactDetailFetchRequest::*stateChanged)(QContactAbstractRequest::State state),
+            void (QContactDetailFetchRequest::*resultsAvailable)())
+        : q_ptr(q)
+        , stateChanged(stateChanged)
+        , resultsAvailable(resultsAvailable)
+    {
+    }
 
-const QContactDetail::DetailType QContactIncidental::Type(static_cast<QContactDetail::DetailType>(QContactDetail__TypeIncidental));
+    QContactDetailFetchRequest * const q_ptr;
+    void (QContactDetailFetchRequest::* const stateChanged)(QContactAbstractRequest::State state);
+    void (QContactDetailFetchRequest::* const resultsAvailable)();
+
+    QContactFilter filter;
+    QContactFetchHint hint;
+    QList<QContactSortOrder> sorting;
+    QList<int> fields;
+    QList<QContactDetail> details;
+    QPointer<QContactManager> manager;
+    QContactDetail::DetailType type = QContactDetail::TypeUndefined;
+    QContactAbstractRequest::State state = QContactAbstractRequest::InactiveState;
+    QContactManager::Error error = QContactManager::NoError;
+};
+
+QT_END_NAMESPACE_CONTACTS
 
 #endif

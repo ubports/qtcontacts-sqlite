@@ -7,4 +7,7 @@ SUBDIRS = \
     phonenumber \
     memorytable \
     database \
-    displaylabelgroups
+    displaylabelgroups \
+    detailfetchrequest \
+    synctransactions
+

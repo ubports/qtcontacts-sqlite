@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Jolla Ltd. <mattthew.vogt@jollamobile.com>
+ * Copyright (c) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -29,27 +29,44 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
  */
 
-#ifndef QCONTACTINCIDENTAL_H
-#define QCONTACTINCIDENTAL_H
+#ifndef QCONTACTCHANGESSAVEREQUEST_P_H
+#define QCONTACTCHANGESSAVEREQUEST_P_H
 
-#include <QContactDetail>
+#include "./qcontactchangessaverequest.h"
+
+#include <QPointer>
 
 QT_BEGIN_NAMESPACE_CONTACTS
 
-class QContactIncidental : public QContactDetail
+class QContactChangesSaveRequestPrivate
 {
 public:
-    Q_DECLARE_CUSTOM_CONTACT_DETAIL(QContactIncidental)
+    static QContactChangesSaveRequestPrivate *get(QContactChangesSaveRequest *request) { return request->d_func(); }
 
-    enum {
-        FieldInitialAggregateId = 0
-    };
+    QContactChangesSaveRequestPrivate(
+            QContactChangesSaveRequest *q,
+            void (QContactChangesSaveRequest::*stateChanged)(QContactAbstractRequest::State state),
+            void (QContactChangesSaveRequest::*resultsAvailable)())
+        : q_ptr(q)
+        , stateChanged(stateChanged)
+        , resultsAvailable(resultsAvailable)
+    {
+    }
 
-    // This field is not available after contact creation
-    void setInitialAggregateId(const QContactId &id);
-    QContactId initialAggregateId() const;
+    QContactChangesSaveRequest * const q_ptr;
+    void (QContactChangesSaveRequest::* const stateChanged)(QContactAbstractRequest::State state);
+    void (QContactChangesSaveRequest::* const resultsAvailable)();
+
+    QPointer<QContactManager> manager;
+    QContactChangesSaveRequest::ConflictResolutionPolicy policy = QContactChangesSaveRequest::PreserveLocalChanges;
+    bool clearChangeFlags = false;
+    QHash<QContactCollection, QList<QContact> > addedCollections;
+    QHash<QContactCollection, QList<QContact> > modifiedCollections;
+    QList<QContactCollectionId> removedCollections;
+    QContactAbstractRequest::State state = QContactAbstractRequest::InactiveState;
+    QContactManager::Error error = QContactManager::NoError;
 };
 
 QT_END_NAMESPACE_CONTACTS
 
-#endif
+#endif // QCONTACTCHANGESSAVEREQUEST_P_H

@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2013 Jolla Ltd. <matthew.vogt@jollamobile.com>
+ * Copyright (C) 2013 - 2014 Jolla Ltd.
+ * Copyright (C) 2019 - 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -40,9 +41,14 @@ namespace {
 
 QString normalize(const QString &input, int flags, int maxCharacters)
 {
-    // Allow '[' and ']' even though RFC3966 doesn't
-    static const QString allowedSeparators(QString::fromLatin1(" -()[]"));
-    static const QString dtmfChars(QString::fromLatin1("pP,.wWxX#*"));
+    // Allow '[' and ']' even though RFC3966 doesn't.
+    // Also, even though RFC3966 explicitly disallows dialstring characters
+    // such as DTMF pause etc, support those as per RFC2806 in order
+    // to enable ITU-T V.250 style dialstring sequences.
+    // Finally, convert ',' and ';' to 'p' and 'w' respectively for
+    // consistency with defacto industry standards.
+    static const QString allowedSeparators(QString::fromLatin1(" .-()[]"));
+    static const QString dtmfChars(QString::fromLatin1("pPwWxX,;#*"));
     static const QString sipScheme(QString::fromLatin1("sips:"));
     static const QString hashControl(QString::fromLatin1("#31#"));
     static const QString starControl(QString::fromLatin1("*31#"));
@@ -122,9 +128,15 @@ QString normalize(const QString &input, int flags, int maxCharacters)
                     firstDtmfIndex = subset.length();
                 }
 
-                // Accept 'x' and 'X', but convert them to 'p' in the normalized form
                 if ((*it).toLower() == QChar::fromLatin1('x')) {
+                    // Accept 'x' and 'X', but convert them to 'p' in the normalized form
                     subset.append(QChar::fromLatin1('p'));
+                } else if (*it == QChar::fromLatin1(',')) {
+                    // Accept ',' but convert to 'p' in the normalized form
+                    subset.append(QChar::fromLatin1('p'));
+                } else if (*it == QChar::fromLatin1(';')) {
+                    // Accept ';' but convert to 'w' in the normalized form
+                    subset.append(QChar::fromLatin1('w'));
                 } else {
                     subset.append(*it);
                 }
@@ -166,27 +178,26 @@ QString normalize(const QString &input, int flags, int maxCharacters)
 
 namespace QtContactsSqliteExtensions {
 
-QContactId apiContactId(quint32 iid)
+QContactCollectionId aggregateCollectionId(const QString &managerUri)
 {
-    QContactId contactId;
-    if (iid != 0) {
-        static const QString idStr(QString::fromLatin1("qtcontacts:org.nemomobile.contacts.sqlite::sql-%1"));
-        contactId = QContactId::fromString(idStr.arg(iid));
-        if (contactId.isNull()) {
-            qWarning() << "Unable to formulate valid ID from:" << iid;
-        }
-    }
-    return contactId;
+    return QContactCollectionId(managerUri, QByteArrayLiteral("col-") + QByteArray::number(1));
+}
+
+QContactCollectionId localCollectionId(const QString &managerUri)
+{
+    return QContactCollectionId(managerUri, QByteArrayLiteral("col-") + QByteArray::number(2));
+}
+
+QContactId apiContactId(quint32 iid, const QString &managerUri)
+{
+    return QContactId(managerUri, QByteArrayLiteral("sql-") + QByteArray::number(iid));
 }
 
 quint32 internalContactId(const QContactId &id)
 {
-    if (!id.isNull()) {
-        QStringList components = id.toString().split(QChar::fromLatin1(':'));
-        const QString &idComponent = components.isEmpty() ? QString() : components.last();
-        if (idComponent.startsWith(QString::fromLatin1("sql-"))) {
-            return idComponent.mid(4).toUInt();
-        }
+    const QByteArray localId = id.localId();
+    if (localId.startsWith(QByteArrayLiteral("sql-"))) {
+        return localId.mid(4).toUInt();
     }
     return 0;
 }

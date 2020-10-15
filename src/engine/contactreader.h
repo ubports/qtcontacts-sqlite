@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2013 Jolla Ltd. <andrew.den.exter@jollamobile.com>
+ * Copyright (c) 2013 - 2019 Jolla Ltd.
+ * Copyright (c) 2019 - 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -46,7 +47,7 @@ QTCONTACTS_USE_NAMESPACE
 class ContactReader
 {
 public:
-    ContactReader(ContactsDatabase &database);
+    ContactReader(ContactsDatabase &database, const QString &managerUri);
     virtual ~ContactReader();
 
     QContactManager::Error readContacts(
@@ -54,7 +55,8 @@ public:
             QList<QContact> *contacts,
             const QContactFilter &filter,
             const QList<QContactSortOrder> &order,
-            const QContactFetchHint &fetchHint);
+            const QContactFetchHint &fetchHint,
+            bool keepChangeFlags = false); // for sync fetch only
 
     QContactManager::Error readContacts(
             const QString &table,
@@ -83,6 +85,41 @@ public:
             const QContactId &first,
             const QContactId &second);
 
+    QContactManager::Error readDetails(
+            QList<QContactDetail> *details,
+            QContactDetail::DetailType type,
+            QList<int> fields,
+            const QContactFilter &filter,
+            const QList<QContactSortOrder> &order,
+            const QContactFetchHint &hint);
+
+    QContactManager::Error getCollectionIdentity(
+            ContactsDatabase::CollectionIdentity identity,
+            QContactCollectionId *collectionId);
+
+    QContactManager::Error readCollections(
+            const QString &table,
+            QList<QContactCollection> *collections);
+
+    QContactManager::Error fetchCollections(
+            int accountId,
+            const QString &applicationName,
+            QList<QContactCollection> *addedCollections,
+            QList<QContactCollection> *modifiedCollections,
+            QList<QContactCollection> *deletedCollections,
+            QList<QContactCollection> *unmodifiedCollections);
+
+    QContactManager::Error fetchContacts(
+            const QContactCollectionId &collectionId,
+            QList<QContact> *addedContacts,
+            QList<QContact> *modifiedContacts,
+            QList<QContact> *deletedContacts,
+            QList<QContact> *unmodifiedContacts);
+
+    QContactManager::Error recordUnhandledChangeFlags(
+            const QContactCollectionId &collectionId,
+            bool *record);
+
     bool fetchOOB(const QString &scope, const QStringList &keys, QMap<QString, QVariant> *values);
 
     bool fetchOOBKeys(const QString &scope, QStringList *keys);
@@ -93,15 +130,29 @@ protected:
             const QContactFilter &filter);
 
     QContactManager::Error queryContacts(
-            const QString &table, QList<QContact> *contacts, const QContactFetchHint &fetchHint, bool relaxConstraints = false);
+            const QString &table,
+            QList<QContact> *contacts,
+            const QContactFetchHint &fetchHint,
+            bool relaxConstraints = false,
+            bool ignoreDeleted = false,
+            bool keepChangeFlags = false);
+
     QContactManager::Error queryContacts(
-            const QString &table, QList<QContact> *contacts, const QContactFetchHint &fetchHint, bool relaxConstraints, QSqlQuery &query, QSqlQuery &relationshipQuery);
+            const QString &table,
+            QList<QContact> *contacts,
+            const QContactFetchHint &fetchHint,
+            bool relaxConstraints,
+            bool keepChangeFlags,
+            QSqlQuery &query,
+            QSqlQuery &relationshipQuery);
 
     virtual void contactsAvailable(const QList<QContact> &contacts);
     virtual void contactIdsAvailable(const QList<QContactId> &contactIds);
+    virtual void collectionsAvailable(const QList<QContactCollection> &collections);
 
 private:
     ContactsDatabase &m_database;
+    QString m_managerUri;
 };
 
 #endif
