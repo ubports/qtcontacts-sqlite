@@ -16,7 +16,7 @@ endif
 override_dh_install:
 	# remove the tests
 	rm -rf debian/tmp/opt
-	rm -rf debian/tmp/usr/lib/arm-linux-gnueabihf/qtcontacts-sqlite-qt5/libtestdlgg.so
+	rm -rf debian/tmp/usr/lib/*/qtcontacts-sqlite-qt5/libtestdlgg.so
 	dh_install --fail-missing
 
 %:
