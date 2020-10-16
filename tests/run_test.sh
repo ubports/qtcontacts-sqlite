@@ -22,9 +22,13 @@ OUTPUT=$(dbus-daemon --session --print-address '' --print-pid '' --fork)
 export DBUS_SESSION_BUS_ADDRESS=$(echo "$OUTPUT" | head -1)
 DBUS_DAEMON_PID=$(echo "$OUTPUT" | tail -1)
 
+# Setup a temporary directory for the database file
+export XDG_DATA_HOME="$(mktemp -d)"
+
 cleanUp() {
     echo "Killing the temporary D-Bus daemon"
     kill "$DBUS_DAEMON_PID"
+    rm -r "$XDG_DATA_HOME"
 }
 
 trap cleanUp EXIT INT TERM
