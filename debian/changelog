@@ -1,3 +1,10 @@
+qtcontacts-sqlite (0.3.4+ubports0) xenial; urgency=medium
+
+  * Update from latest upstream
+  * debian: add migrations script
+
+ -- Alberto Mardegan <mardy@users.sourceforge.net>  Sat, 17 Oct 2020 17:57:03 +0300
+
 qtcontacts-sqlite (0.2.27+ubports1) xenial; urgency=medium
 
   * First xenial release, add Jenkinsfile.
