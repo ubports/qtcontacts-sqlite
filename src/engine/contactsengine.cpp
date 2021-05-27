@@ -605,6 +605,9 @@ public:
         , m_first(request->first())
         , m_second(request->second())
     {
+        // workaround for https://git.sailfishos.org/mer-core/qtcontacts-sqlite/issues/7
+        // AKA https://bugreports.qt.io/browse/QTBUG-94070
+        m_type.detach();
     }
 
     void execute(ContactReader *reader, WriterProxy &) override
