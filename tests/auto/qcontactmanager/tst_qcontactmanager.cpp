@@ -4959,7 +4959,7 @@ void tst_QContactManager::searchSensitivity()
     QCOMPARE(m->contactIds().count(), currCount+1);
 
     QCOMPARE(m->contactIds(exactMatch).count(), originalCount[0] + 1);
-    QCOMPARE(m->contactIds(exactMismatch).count(), originalCount[1]);
+    QCOMPARE(m->contactIds(exactMismatch).count(), originalCount[1] + 1);
     QCOMPARE(m->contactIds(insensitiveMatch).count(), originalCount[2] + 1);
     QCOMPARE(m->contactIds(insensitiveMismatch).count(), originalCount[3] + 1);
     QCOMPARE(m->contactIds(sensitiveMatch).count(), originalCount[4] + 1);
