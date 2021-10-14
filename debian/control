@@ -6,6 +6,7 @@ Build-Depends: debhelper (>= 9),
                dh-migrations,
                pkg-config,
                libqt5sql5-sqlite,
+               libsqlite3-dev,
                qt5-default,
                qtbase5-dev,
                qtpim5-dev,
@@ -19,6 +20,7 @@ Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libqt5sql5-sqlite,
+         sqlite-icu-extension,
          ${misc:Depends},
          ${shlibs:Depends},
 Description: SQLite-based plugin for QtPIM Contacts

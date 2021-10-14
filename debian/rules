@@ -7,6 +7,10 @@ export QT_SELECT := qt5
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		CONFIG+=load_icu
+
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	mkdir -p test-home/.local/share # Workaround for jenkins
